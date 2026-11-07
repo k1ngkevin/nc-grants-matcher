@@ -13,6 +13,25 @@ from decimal import Decimal
 from .config import DATABASE_URL, DB_PATH
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS api_rate_events (
+    bucket TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_api_rate ON api_rate_events(bucket, subject, created_at);
+CREATE INDEX IF NOT EXISTS idx_api_rate_created ON api_rate_events(created_at);
+CREATE TABLE IF NOT EXISTS public_subscription_requests (
+    token TEXT PRIMARY KEY,
+    email TEXT NOT NULL,
+    agency_id TEXT NOT NULL,
+    filters TEXT NOT NULL,
+    frequency TEXT NOT NULL,
+    top_n INTEGER NOT NULL,
+    expires_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS public_subscriptions (
+    subscription_id INTEGER PRIMARY KEY
+);
 CREATE TABLE IF NOT EXISTS opportunities (
     id TEXT PRIMARY KEY,              -- source:native_id, e.g. grantsgov:357898
     source TEXT NOT NULL,

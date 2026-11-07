@@ -35,6 +35,7 @@ from .search import Filters, search
 log = logging.getLogger(__name__)
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 FREQUENCIES = {"daily": 1, "weekly": 7, "biweekly": 14, "monthly": 30}
+MAX_DIGEST_GRANTS = 100
 SEND_HOUR_UTC = 12  # ~8am Eastern
 RETRY_AFTER = timedelta(hours=1)  # when a digest fails to send
 # Python folds headers at 78 characters and RFC 2047-encodes long URLs to do it, which
@@ -73,8 +74,6 @@ def config_problems() -> list[str]:
     if "@example." in config.SMTP_FROM.lower():
         problems.append(f"SMTP_FROM is a placeholder ({config.SMTP_FROM}). Use an address your mail service is allowed "
                         "to send from, or messages will bounce or land in spam.")
-    if not config.ALLOWED_EMAIL_DOMAINS:
-        problems.append("ALLOWED_EMAIL_DOMAINS is empty, so anyone using the site can send email to any address.")
     return problems
 
 
@@ -210,13 +209,16 @@ def _shell(title: str, inner: str, footer: str = "") -> str:
 </table></td></tr></table></body></html>"""
 
 
-def _result_row(r: dict, agency_id: str) -> str:
+def _result_row(r: dict, agency_id: str, public: bool = False) -> str:
     o, s = r["opportunity"], r["signals"]
     e = html.escape
     deadline = "Forecast, not open yet" if s["timing"] == "forecasted" else (
         f"Closes {o['close_date']} ({s['days_left']} days)" if s["days_left"] is not None else "No close date listed")
     urgent = "color:#b42318;font-weight:600" if s["timing"] == "urgent" else "color:#5a6b7d"
     link = f"{config.PUBLIC_BASE_URL}/?agency={agency_id}&opp={o['id']}"
+    if public:
+        candidate = o.get("url") or ""
+        link = candidate if urlparse(candidate).scheme in {"https", "http"} else f"{config.PUBLIC_BASE_URL}/subscribe"
     sample = ' <span style="background:#fff4d6;color:#7a5b00;font-size:11px;padding:1px 6px;border-radius:8px">SAMPLE</span>' if o.get("is_sample") else ""
     return f"""<tr><td style="padding:14px 0;border-top:1px solid #e3e8ef">
 <div style="font-size:12px;color:#5a6b7d">{e(o.get('federal_agency') or '')} &middot; Ranking score <b style="color:#123b68">{r['score']}</b></div>
@@ -237,16 +239,34 @@ def digest_html(sub: dict, data: dict) -> str:
     intro = (f"<p style='margin:0 0 6px'>The top {len(data['results'])} federal opportunities for <b>{html.escape(agency['name'])}</b>"
              f"{f', including <b style=color:#b42318>{urgent} closing within 14 days</b>' if urgent else ''}.</p>"
              f"<p style='margin:0 0 8px'><a href='{site}' style='color:#123b68'>Open the full list, and mark Pursue, Save or Dismiss</a></p>")
-    rows = "".join(_result_row(r, agency["id"]) for r in data["results"])
+    requested = sub.get("top_n", len(data["results"]))
+    intro += f"<p>You requested up to {requested} grants, ranked by match score using your saved filters.</p>"
+    if len(data["results"]) < requested:
+        intro += f"<p>Only {len(data['results'])} grants currently match your filters.</p>"
+    if sub.get("public"):
+        intro = intro.replace(f"{site}", f"{config.PUBLIC_BASE_URL}/subscribe").replace("Open the full list, and mark Pursue, Save or Dismiss", "Update your public subscription preferences")
+    rows = "".join(_result_row(r, agency["id"], public=sub.get("public", False)) for r in data["results"])
     footer = (f"You get this {sub['frequency']} because you subscribed on the Matchmaker site. "
               f"Scores are recommendations; your team decides. <a href='{unsub}' style='color:#5a6b7d'>Unsubscribe</a>")
+    if sub.get("test"):
+        footer = "This is a one-time test of your selected grants. No subscription was created or changed. Scores are recommendations; your team decides."
     return _shell(f"Top grants for {agency['short']}", intro + f"<table width='100%' cellpadding='0' cellspacing='0'>{rows}</table>", footer)
+
+
+def send_test_digest(email: str, agency_id: str, filters: dict, top_n: int) -> dict:
+    """Use the real digest renderer and transport without changing subscriptions."""
+    f = Filters.from_dict({**filters, "agency_id": agency_id, "view": "recommended", "sort": "score"})
+    data = search(f, limit=top_n, public=True)
+    sub = {"agency_id": agency_id, "top_n": top_n, "frequency": "once", "token": "test", "test": True, "public": True}
+    delivery = send(email, f"[Test] {len(data['results'])} federal grants for {data['agency']['short']}", digest_html(sub, data))
+    return {"email": email, "top_n": top_n, "grant_count": len(data["results"]),
+            "email_enabled": config.EMAIL_ENABLED, "delivery": delivery}
 
 
 def confirm_html(sub: dict) -> str:
     agency = AGENCY_BY_ID[sub["agency_id"]]
     link = f"{config.PUBLIC_BASE_URL}/api/subscriptions/confirm?token={quote(sub['token'], safe='')}"
-    inner = (f"<p>Click below to start getting the top grants for <b>{html.escape(agency['name'])}</b> {sub['frequency']}.</p>"
+    inner = (f"<p>Click below to start getting up to {sub['top_n']} top grants for <b>{html.escape(agency['name'])}</b> {sub['frequency']}.</p>"
              f"<p><a href='{link}' style='display:inline-block;background:#123b68;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none'>Confirm my subscription</a></p>"
              "<p style='font-size:13px;color:#5a6b7d'>If you didn't request this, ignore this email and nothing will be sent.</p>")
     return _shell("Confirm your grant alerts", inner)
@@ -254,8 +274,10 @@ def confirm_html(sub: dict) -> str:
 
 # ---------------- subscription lifecycle ----------------
 def create_subscription(email: str, agency_id: str, filters: dict, frequency: str, top_n: int) -> dict:
+    if type(top_n) is not int or not 1 <= top_n <= MAX_DIGEST_GRANTS:
+        raise ValueError(f"Choose a whole number of grants from 1 to {MAX_DIGEST_GRANTS}.")
     email = email.strip().lower()
-    f = Filters.from_dict({**filters, "agency_id": agency_id, "view": "recommended"}).to_dict()
+    f = Filters.from_dict({**filters, "agency_id": agency_id, "view": "recommended", "sort": "score"}).to_dict()
     with db.session() as conn:
         existing = conn.execute("SELECT * FROM subscriptions WHERE email=? AND agency_id=? AND active=1", (email, agency_id)).fetchone()
         if existing:  # update instead of duplicating
@@ -272,7 +294,7 @@ def create_subscription(email: str, agency_id: str, filters: dict, frequency: st
             sub_id = cur.lastrowid
         sub = db.row_to_dict(conn.execute("SELECT * FROM subscriptions WHERE id=?", (sub_id,)).fetchone())
 
-    result = {"id": sub["id"], "email": email, "frequency": frequency, "confirmed": bool(sub["confirmed"]),
+    result = {"id": sub["id"], "email": email, "frequency": frequency, "top_n": sub["top_n"], "confirmed": bool(sub["confirmed"]),
               "email_enabled": config.EMAIL_ENABLED}
     if not sub["confirmed"]:
         result["delivery"] = send(email, "Confirm your NC grant alerts", confirm_html(sub))
@@ -308,8 +330,11 @@ def unsubscribe(token: str) -> bool:
 
 
 def send_digest(sub: dict) -> dict:
+    with db.session() as conn:
+        public = conn.execute("SELECT 1 FROM public_subscriptions WHERE subscription_id=?", (sub["id"],)).fetchone() is not None
+    sub = {**sub, "public": public}
     f = Filters.from_dict({**sub["filters"], "agency_id": sub["agency_id"], "view": "recommended", "sort": "score"})
-    data = search(f, limit=sub["top_n"], with_llm=True)
+    data = search(f, limit=sub["top_n"], with_llm=not public, public=public)
     now = datetime.now(timezone.utc)
     result = {"delivered": False, "skipped": "no matches"}
     if data["results"]:

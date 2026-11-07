@@ -66,8 +66,13 @@ def latest_decisions(decisions: list[dict]) -> dict[str, dict]:
     return {k: v for k, v in latest.items() if v["action"] != "undo"}
 
 
-def search(f: Filters, limit: int = 50, offset: int = 0, with_llm: bool = False) -> dict:
-    agency, profile_chunks, projects, decisions = load_agency_context(f.agency_id)
+def search(f: Filters, limit: int = 50, offset: int = 0, with_llm: bool = False, public: bool = False) -> dict:
+    if public:
+        agency = AGENCY_BY_ID[f.agency_id]
+        profile_chunks = [f"{agency['name']}. {agency['mission']} Focus areas: {', '.join(agency['keywords'])}."]
+        projects, decisions = [], []
+    else:
+        agency, profile_chunks, projects, decisions = load_agency_context(f.agency_id)
     status_by_opp = latest_decisions(decisions)
 
     with db.session() as conn:

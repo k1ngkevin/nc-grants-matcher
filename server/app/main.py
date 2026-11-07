@@ -5,19 +5,17 @@ import io
 import logging
 import os
 import threading
-import time
-from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from urllib.parse import quote
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import config, db, emailer, evaluate, research
+from . import auth, config, db, emailer, evaluate, public_subscriptions, security
 from .agencies import AGENCIES, AGENCY_BY_ID
 from .ingest import pipeline
 from .matching import embeddings, explain
@@ -41,6 +39,7 @@ def _scheduled_ingest():
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    auth.validate_config()
     db.init_db()
     if config.EMAIL_ENABLED:
         log.info("Email: sending through %s as %s", emailer.describe_backend(), config.SMTP_FROM)
@@ -78,34 +77,75 @@ async def lifespan(_: FastAPI):
         scheduler.shutdown(wait=False)
 
 
-app = FastAPI(title="NC Federal Funds Matchmaker", lifespan=lifespan)
+app = FastAPI(title="NC Federal Funds Matchmaker", lifespan=lifespan,
+              dependencies=[Depends(auth.authorize_agency)])
+app.include_router(public_subscriptions.router)
+
+
+@app.middleware("http")
+async def authenticate(request: Request, call_next):
+    if request.url.path == "/healthz":
+        return JSONResponse({"status": "ok"})
+    if len(request.scope.get("query_string", b"")) > 4096:
+        return JSONResponse({"detail": "Query string is too long."}, status_code=414)
+    if request.url.path.startswith("/api/"):
+        try:
+            security.limit("api-global", "all", 600, 60)
+            security.limit("api", security.client_ip(request), 120, 60)
+            if request.url.path in {"/api/search", "/api/export.csv", "/api/subscriptions/preview"}:
+                security.limit("expensive-api", security.client_ip(request), 20, 60)
+        except HTTPException as exc:
+            return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
+    # Enforce the actual streamed size too: Content-Length alone is forgeable.
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        maximum = 16384 if request.url.path.startswith("/api/public/") else 1500000
+        chunks, size = [], 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > maximum:
+                return JSONResponse({"detail": "Request body is too large."}, status_code=413)
+            chunks.append(chunk)
+        request._body = b"".join(chunks)
+        origin = request.headers.get("origin")
+        token_action = request.method == "POST" and request.url.path in public_subscriptions.TOKEN_ACTION_PATHS
+        if origin and origin != config.PUBLIC_BASE_URL and not token_action:
+            return JSONResponse({"detail": "Cross-origin requests are not allowed."}, status_code=403)
+        if request.url.path in {"/api/public/subscriptions"} and request.headers.get("content-type", "").split(";")[0] != "application/json":
+            return JSONResponse({"detail": "Use application/json."}, status_code=415)
+    if config.AUTH_MODE != "development" and not public_subscriptions.is_public(request):
+        try:
+            request.state.identity = auth.identity_from_headers(request)
+            # Easy Auth uses cookies. Block cross-origin writes and JSON requests
+            # submitted as simple HTML forms; do not trust browser-supplied identity.
+            if request.method not in {"GET", "HEAD", "OPTIONS"}:
+                origin = request.headers.get("origin")
+                if origin and origin != config.PUBLIC_BASE_URL:
+                    raise HTTPException(403, "Cross-origin requests are not allowed.")
+                if request.url.path.startswith("/api/") and request.url.path not in {
+                    "/api/subscriptions/confirm", "/api/subscriptions/unsubscribe", "/api/admin/ingest"
+                } and request.headers.get("content-type", "").split(";")[0] != "application/json" and request.method != "DELETE":
+                    raise HTTPException(415, "Use application/json.")
+        except HTTPException as exc:
+            return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
+    return await call_next(request)
 
 
 # ---------------- basic hardening ----------------
-_hits: dict[str, deque] = defaultdict(deque)
-_hits_lock = threading.Lock()
-
-
 def rate_limit(request: Request, bucket: str, limit: int, per_seconds: int = 3600):
-    ip = request.client.host if request.client else "unknown"
-    key, now = f"{bucket}:{ip}", time.time()
-    with _hits_lock:
-        q = _hits[key]
-        while q and q[0] < now - per_seconds:
-            q.popleft()
-        if len(q) >= limit:
-            raise HTTPException(429, "Too many requests. Please try again later.")
-        q.append(now)
+    security.limit(bucket, security.client_ip(request), limit, per_seconds)
 
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     resp = await call_next(request)
-    # setdefault: a route may set its own framing rules (the notice PDFs are shown in an iframe on this site).
-    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
-    resp.headers.setdefault("X-Frame-Options", "DENY")
-    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-    resp.headers.setdefault("Content-Security-Policy", (
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if "token" in request.query_params:
+        resp.headers["Referrer-Policy"] = "no-referrer"
+    if request.url.path.startswith("/api/"):
+        resp.headers["Cache-Control"] = "no-store"
+    resp.headers["Content-Security-Policy"] = (
         "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; "
         "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"))
     return resp
@@ -158,7 +198,7 @@ class SubscribeBody(BaseModel):
     email: str = Field(max_length=254)
     agency_id: str
     frequency: str = Field("weekly", pattern="^(daily|weekly|biweekly|monthly)$")
-    top_n: int = Field(10, ge=3, le=25)
+    top_n: int = Field(10, ge=1, le=emailer.MAX_DIGEST_GRANTS, strict=True)
     filters: dict = {}
 
 
@@ -170,12 +210,13 @@ def _filters(body: SearchBody) -> Filters:
 
 # ---------------- API ----------------
 @app.get("/api/meta")
-def meta():
+def meta(request: Request):
     last = db.get_meta("last_ingest")
     with db.session() as conn:
         n = conn.execute("SELECT COUNT(*), SUM(is_sample) FROM opportunities").fetchone()
     return {
-        "agencies": [{k: a[k] for k in ("id", "short", "name", "applicant")} for a in sorted(AGENCIES, key=lambda a: a["name"])],
+        "agencies": [{k: a[k] for k in ("id", "short", "name", "applicant")} for a in sorted(AGENCIES, key=lambda a: a["name"])
+                     if config.AUTH_MODE == "development" or request.state.identity.allows(a["id"])],
         "last_ingest": last,
         "opportunity_count": n[0],
         "sample_data": bool(n[1]),
@@ -183,6 +224,7 @@ def meta():
         "default_min_score": DEFAULT_MIN_SCORE,
         "email_enabled": config.EMAIL_ENABLED,
         "email_confirmation": config.REQUIRE_EMAIL_CONFIRMATION,
+        "max_digest_grants": emailer.MAX_DIGEST_GRANTS,
         "allowed_email_domains": config.ALLOWED_EMAIL_DOMAINS,
         "ai": {"embeddings": embeddings.active_backend(), "explanations": "azure-openai" if explain.available() else "rules",
                "research": research.available()},
@@ -360,12 +402,29 @@ def unsubscribe(token: str):
     return _page("You're unsubscribed", "You won't get any more grant alerts at this address.")
 
 
+@app.post("/api/subscriptions/test")
+def test_digest(body: SubscribeBody, request: Request):
+    rate_limit(request, "test_digest", 5)
+    security.limit("test-recipient", body.email, 3, 3600)
+    security.limit("test-global", "all", 50, 3600)
+    _agency(body.agency_id)
+    err = emailer.valid_email(body.email)
+    if err:
+        raise HTTPException(400, err)
+    if config.AUTH_MODE != "development" and body.email.strip().lower() != request.state.identity.name.lower():
+        raise HTTPException(403, "Send test emails only to your signed-in work email.")
+    result = emailer.send_test_digest(body.email.strip(), body.agency_id, body.filters, body.top_n)
+    if result["delivery"].get("error"):
+        raise HTTPException(503, "The test email could not be sent. Check the email provider settings and try again.")
+    return result
+
+
 @app.post("/api/subscriptions/preview", response_class=HTMLResponse)
 def preview(body: SubscribeBody):
     _agency(body.agency_id)
     f = Filters.from_dict({**body.filters, "agency_id": body.agency_id, "view": "recommended", "sort": "score"})
-    data = search(f, limit=body.top_n, with_llm=True)
-    fake = {"agency_id": body.agency_id, "token": "preview", "frequency": body.frequency}
+    data = search(f, limit=body.top_n, public=True)
+    fake = {"agency_id": body.agency_id, "token": "preview", "frequency": body.frequency, "top_n": body.top_n, "public": True, "test": True}
     return HTMLResponse(emailer.digest_html(fake, data))
 
 
@@ -505,7 +564,7 @@ def metrics():
 
 @app.post("/api/admin/ingest")
 def admin_ingest(request: Request, sample: bool = False):
-    if not ADMIN_TOKEN or request.headers.get("x-admin-token") != ADMIN_TOKEN:
+    if config.AUTH_MODE == "development" and (not ADMIN_TOKEN or request.headers.get("x-admin-token") != ADMIN_TOKEN):
         raise HTTPException(403, "Set ADMIN_TOKEN and send it in the X-Admin-Token header")
     threading.Thread(target=pipeline.run, kwargs={"sample": sample}, daemon=True).start()
     return {"started": True}
