@@ -54,7 +54,7 @@ SMTP_HOST = os.getenv("SMTP_HOST", "")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-SMTP_FROM = os.getenv("SMTP_FROM", "NC Federal Funds Matchmaker <no-reply@example.gov>")
+SMTP_FROM = os.getenv("SMTP_FROM", "GrantNC <no-reply@example.gov>")
 SMTP_STARTTLS = os.getenv("SMTP_STARTTLS", "true").lower() == "true"
 # Or send through Azure Communication Services' email API with the resource's connection string
 # (Keys page), which needs no SMTP username. Takes priority over SMTP_HOST. SMTP_FROM is the sender.

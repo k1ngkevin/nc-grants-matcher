@@ -13,7 +13,9 @@ import {
 } from "lucide-react";
 import { api, documentUrl, downloadGrantCalendar, fmtDate } from "./api.js";
 import ContourField from "./ContourField.jsx";
+import AskPanel, { GRANTBOT_HELLO, GRANTBOT_HELPS } from "./AskPanel.jsx";
 import EffortMatch from "./EffortMatch.jsx";
+import { TrailLoader } from "./StateSurvey.jsx";
 import Explained, { GlossaryContext } from "./Explained.jsx";
 import { buildGlossary, findTerms } from "./grantTerms.js";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -26,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 const VERDICT = {
@@ -168,20 +171,32 @@ export default function ResearchDialog({
               {[
                 ["plan", "Plan"],
                 ["effort", "Effort & match"],
+                ["ask", "GrantBot"],
                 [
                   "docs",
                   `Notice documents${data ? ` (${data.documents.length})` : ""}`,
                 ],
-              ].map(([key, label]) => (
-                <TabsTrigger
-                  key={key}
-                  value={key}
-                  disabled={key !== "plan" && !data}
-                  className="flex-none px-0 pt-1 pb-3.5 text-[15px] text-fog/65 after:bottom-0 after:h-[3px] after:bg-blaze hover:text-fog data-[state=active]:font-extrabold data-[state=active]:text-fog"
-                >
-                  {label}
-                </TabsTrigger>
-              ))}
+              ].map(([key, label]) => {
+                const tab = (
+                  <TabsTrigger
+                    key={key}
+                    value={key}
+                    disabled={key !== "plan" && !data}
+                    className="flex-none px-0 pt-1 pb-3.5 text-[15px] text-fog/65 after:bottom-0 after:h-[3px] after:bg-blaze hover:text-fog data-[state=active]:font-extrabold data-[state=active]:text-fog"
+                  >
+                    {label}
+                  </TabsTrigger>
+                );
+                return key === "ask" ? (
+                  <Tooltip key={key}>
+                    <TooltipTrigger asChild>{tab}</TooltipTrigger>
+                    <TooltipContent className="max-w-xs text-[12.5px] leading-snug">
+                      <span className="block font-extrabold">{GRANTBOT_HELLO}</span>
+                      {GRANTBOT_HELPS}
+                    </TooltipContent>
+                  </Tooltip>
+                ) : tab;
+              })}
             </TabsList>
           </header>
 
@@ -216,6 +231,11 @@ export default function ResearchDialog({
             {state.status === "done" && (
               <Plan data={data} r={r} onCite={showDoc} />
             )}
+          </TabsContent>
+
+          {/* Kept mounted while hidden, so reading a cited page doesn't wipe the conversation. */}
+          <TabsContent value="ask" forceMount className="flex min-h-0 flex-col data-[state=inactive]:hidden">
+            {data && <AskPanel opportunity={o} agency={agency} onCite={showDoc} />}
           </TabsContent>
 
           <TabsContent value="effort" className="min-h-0 overflow-y-auto">
@@ -366,7 +386,7 @@ function Running({ phase, started }) {
       <div className="max-w-md" role="status" aria-live="polite">
         <p className="display-light text-4xl text-pine">Reading the notice</p>
         <p className="mt-4 flex items-center gap-2 font-extrabold text-pine">
-          <Loader2 className="size-4 shrink-0 animate-spin motion-reduce:[animation-duration:2s]" />{" "}
+          <TrailLoader className="shrink-0" />{" "}
           {phase}
         </p>
         <p className="mt-1 font-mono text-[12px] text-muted-foreground tabular-nums">

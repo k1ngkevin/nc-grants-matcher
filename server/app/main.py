@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
-from . import agenda, auth, config, db, emailer, evaluate, public_subscriptions, research, security
+from . import agenda, auth, chat, config, db, emailer, evaluate, public_subscriptions, research, security
 from .agencies import AGENCIES, AGENCY_BY_ID
 from .ingest import pipeline
 from .matching import embeddings, explain
@@ -77,7 +77,7 @@ async def lifespan(_: FastAPI):
         scheduler.shutdown(wait=False)
 
 
-app = FastAPI(title="NC Federal Funds Matchmaker", lifespan=lifespan,
+app = FastAPI(title="GrantNC", lifespan=lifespan,
               dependencies=[Depends(auth.authorize_agency)])
 app.include_router(public_subscriptions.router)
 
@@ -360,7 +360,7 @@ padding:10px 18px;border-radius:6px;font-size:15px;cursor:pointer">{html.escape(
     return HTMLResponse(f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{html.escape(title)}</title></head><body style="font-family:Segoe UI,Arial,sans-serif;background:#f4f6f9;margin:0">
 <div style="max-width:520px;margin:12vh auto;background:#fff;padding:28px;border-radius:10px">
-<h2 style="color:#123b68;margin-top:0">{html.escape(title)}</h2><p>{message}</p>{form}<p><a href="/" style="color:#123b68">Back to the Matchmaker</a></p></div></body></html>""")
+<h2 style="color:#123b68;margin-top:0">{html.escape(title)}</h2><p>{message}</p>{form}<p><a href="/" style="color:#123b68">Back to GrantNC</a></p></div></body></html>""")
 
 
 # Links in emails only show a page with a button. The change happens on POST, so mail
@@ -600,6 +600,34 @@ def calendar_ics(body: CalendarBody):
     file = "".join(c for c in file if c.isalnum() or c in "-_.")
     return Response(agenda.to_ics(data, name), media_type="text/calendar; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="{file}"'})
+
+
+# ---------------- ask about a grant ----------------
+
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=4000)
+
+
+class ChatBody(BaseModel):
+    opportunity_id: str = Field(max_length=100)
+    agency_id: str = Field(max_length=40)
+    question: str = Field(min_length=3, max_length=1000)
+    history: list[ChatTurn] = Field(default_factory=list, max_length=12)
+
+
+@app.post("/api/chat")
+def ask_about_grant(body: ChatBody, request: Request):
+    """One question about one grant, answered from its notice documents. Nothing is stored."""
+    _agency(body.agency_id)
+    rate_limit(request, "chat", 60)       # each question is a paid AI call
+    security.limit("chat-global", "all", 600, 3600)
+    try:
+        return chat.ask(body.opportunity_id, body.agency_id, body.question, [t.model_dump() for t in body.history])
+    except LookupError:
+        raise HTTPException(404, "That grant wasn't found. Reload the page and try again.")
+    except chat.ChatError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.get("/api/metrics")

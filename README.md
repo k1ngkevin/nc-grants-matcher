@@ -1,4 +1,4 @@
-# NC Federal Funds Matchmaker
+# GrantNC
 
 A simple website for North Carolina state agencies. Pick your agency and you get the open federal grants you're **eligible for**, **ranked by fit**, each with a **plain-English reason**. Mark each one **Pursue**, **Save for later** or **Dismiss**. You can also get the top matches **by email** daily, weekly, every two weeks or monthly.
 
