@@ -77,7 +77,7 @@ async def lifespan(_: FastAPI):
         scheduler.shutdown(wait=False)
 
 
-app = FastAPI(title="NC Federal Funds Matchmaker", lifespan=lifespan,
+app = FastAPI(title="GrantNC", lifespan=lifespan,
               dependencies=[Depends(auth.authorize_agency)])
 app.include_router(public_subscriptions.router)
 
@@ -360,7 +360,7 @@ padding:10px 18px;border-radius:6px;font-size:15px;cursor:pointer">{html.escape(
     return HTMLResponse(f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{html.escape(title)}</title></head><body style="font-family:Segoe UI,Arial,sans-serif;background:#f4f6f9;margin:0">
 <div style="max-width:520px;margin:12vh auto;background:#fff;padding:28px;border-radius:10px">
-<h2 style="color:#123b68;margin-top:0">{html.escape(title)}</h2><p>{message}</p>{form}<p><a href="/" style="color:#123b68">Back to the Matchmaker</a></p></div></body></html>""")
+<h2 style="color:#123b68;margin-top:0">{html.escape(title)}</h2><p>{message}</p>{form}<p><a href="/" style="color:#123b68">Back to GrantNC</a></p></div></body></html>""")
 
 
 # Links in emails only show a page with a button. The change happens on POST, so mail

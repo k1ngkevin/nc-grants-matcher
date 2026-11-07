@@ -368,7 +368,7 @@ function TopBar({ meta, onHome, onGlossary, onFeedback }) {
       <a href="/" className="flex items-center gap-3 rounded-md text-fog no-underline focus-visible:ring-2 focus-visible:ring-blaze focus-visible:outline-none"
         onClick={(e) => { e.preventDefault(); onHome(); }}>
         <BridgeMark className="size-9 shrink-0" />
-        <span className="text-[17px] leading-tight font-extrabold tracking-[-0.01em]">NC Federal Funds Matchmaker</span>
+        <span className="text-[19px] leading-tight font-extrabold tracking-[-0.015em]">GrantNC</span>
       </a>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
         {last && (

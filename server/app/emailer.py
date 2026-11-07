@@ -203,7 +203,7 @@ def _shell(title: str, inner: str, footer: str = "") -> str:
     return f"""<!doctype html><html><body style="margin:0;background:#f4f6f9;font-family:Segoe UI,Arial,sans-serif;color:#1b2a3a">
 <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">
 <table width="640" cellpadding="0" cellspacing="0" style="max-width:640px;background:#fff;border-radius:10px;overflow:hidden">
-<tr><td style="background:#123b68;color:#fff;padding:18px 24px;font-size:18px;font-weight:600">NC Federal Funds Matchmaker</td></tr>
+<tr><td style="background:#123b68;color:#fff;padding:18px 24px;font-size:18px;font-weight:600">GrantNC</td></tr>
 <tr><td style="padding:22px 24px"><h2 style="margin:0 0 12px;font-size:20px">{title}</h2>{inner}</td></tr>
 <tr><td style="padding:14px 24px;background:#f4f6f9;font-size:12px;color:#5a6b7d">{footer}</td></tr>
 </table></td></tr></table></body></html>"""
@@ -246,7 +246,7 @@ def digest_html(sub: dict, data: dict) -> str:
     if sub.get("public"):
         intro = intro.replace(f"{site}", f"{config.PUBLIC_BASE_URL}/subscribe").replace("Open the full list, and mark Pursue, Save or Dismiss", "Update your public subscription preferences")
     rows = "".join(_result_row(r, agency["id"], public=sub.get("public", False)) for r in data["results"])
-    footer = (f"You get this {sub['frequency']} because you subscribed on the Matchmaker site. "
+    footer = (f"You get this {sub['frequency']} because you subscribed on GrantNC. "
               f"Scores are recommendations; your team decides. <a href='{unsub}' style='color:#5a6b7d'>Unsubscribe</a>")
     if sub.get("test"):
         footer = "This is a one-time test of your selected grants. No subscription was created or changed. Scores are recommendations; your team decides."
@@ -391,9 +391,9 @@ def _main(argv: list[str]) -> int:
     print(f"Sending through: {describe_backend()}\nFrom: {config.SMTP_FROM}")
     for p in config_problems():
         print(f"Warning: {p}")
-    body = _shell("Test email", "<p>If you can read this, the Matchmaker can send email.</p>")
+    body = _shell("Test email", "<p>If you can read this, GrantNC can send email.</p>")
     try:
-        _deliver(argv[0], "NC Federal Funds Matchmaker test email", body)
+        _deliver(argv[0], "GrantNC test email", body)
     except (smtplib.SMTPException, OSError, EmailError) as e:
         print(f"Failed: {type(e).__name__}: {e}")
         return 1

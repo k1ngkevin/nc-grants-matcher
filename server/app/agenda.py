@@ -155,7 +155,7 @@ def to_ics(data: dict, name: str) -> str:
     agency_id = data["agency"]["id"]
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     cutoff = (date.today() - timedelta(days=ICS_PAST_DAYS)).isoformat()
-    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//NC Federal Funds Matchmaker//Grant calendar//EN",
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//GrantNC//Grant calendar//EN",
              "CALSCALE:GREGORIAN", "METHOD:PUBLISH", f"X-WR-CALNAME:{_escape(name)}"]
     for e in data["events"]:
         if e["date"] < cutoff:
@@ -172,7 +172,7 @@ def to_ics(data: dict, name: str) -> str:
             detail.insert(1, e["detail"])
         if e.get("source"):
             detail.append(f"Source: {e['source'].get('doc_name')}, page {e['source'].get('page')}.")
-        detail.append(f"In the Matchmaker: {grant_link(agency_id, o['id'])}")
+        detail.append(f"In GrantNC: {grant_link(agency_id, o['id'])}")
         if o.get("url"):
             detail.append(f"Listing: {o['url']}")
         lines += [
