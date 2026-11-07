@@ -1,0 +1,22 @@
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+
+    location /api/ {
+        proxy_pass http://${API_UPSTREAM};   # api:8000 in docker compose; set API_UPSTREAM=localhost:8000 for an Azure sidecar
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;        # in-depth research and PDF downloads can be slow
+        client_max_body_size 20m;       # agency document uploads
+    }
+
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    location / {
+        try_files $uri /index.html;     # single-page app
+    }
+}

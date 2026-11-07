@@ -391,7 +391,7 @@ def azure(monkeypatch):
     monkeypatch.setattr(embeddings.time, "sleep", lambda s: None)
     monkeypatch.setattr(embeddings, "_azure_down_until", 0.0)
     monkeypatch.setattr(explain, "_chat_down_until", 0.0)
-    monkeypatch.setattr(explain, "_shape", 0)
+    monkeypatch.setattr(explain, "_shape_index", {})
     Fake.embed_calls.clear(), Fake.chat_calls.clear()
     yield Fake
     with db.session() as conn:

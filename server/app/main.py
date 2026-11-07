@@ -11,6 +11,8 @@ from urllib.parse import quote
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from . import auth, config, db, emailer, evaluate, public_subscriptions, security
@@ -145,7 +147,7 @@ async def security_headers(request: Request, call_next):
         resp.headers["Cache-Control"] = "no-store"
     resp.headers["Content-Security-Policy"] = (
         "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; "
-        "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+        "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"))
     return resp
 
 
@@ -224,7 +226,8 @@ def meta(request: Request):
         "email_confirmation": config.REQUIRE_EMAIL_CONFIRMATION,
         "max_digest_grants": emailer.MAX_DIGEST_GRANTS,
         "allowed_email_domains": config.ALLOWED_EMAIL_DOMAINS,
-        "ai": {"embeddings": embeddings.active_backend(), "explanations": "azure-openai" if explain.available() else "rules"},
+        "ai": {"embeddings": embeddings.active_backend(), "explanations": "azure-openai" if explain.available() else "rules",
+               "research": research.available()},
         "dismiss_reasons": DISMISS_REASONS,
         "weights": WEIGHTS,
         "glossary": {
@@ -423,6 +426,135 @@ def preview(body: SubscribeBody):
     data = search(f, limit=body.top_n, public=True)
     fake = {"agency_id": body.agency_id, "token": "preview", "frequency": body.frequency, "top_n": body.top_n, "public": True, "test": True}
     return HTMLResponse(emailer.digest_html(fake, data))
+
+
+# ---------------- feedback ----------------
+
+FEEDBACK_KINDS = {"problem": "Something's wrong", "idea": "Idea", "scoring": "Score looks off", "other": "Other"}
+
+
+class FeedbackBody(BaseModel):
+    kind: Literal["problem", "idea", "scoring", "other"]
+    message: str = Field(..., min_length=5, max_length=4000)
+    email: str = Field("", max_length=254)
+    agency_id: str = Field("", max_length=40)
+    opportunity_id: str = Field("", max_length=100)
+    page: str = Field("", max_length=40)
+
+
+def _feedback_email(fid: int, body: FeedbackBody) -> None:
+    e = html.escape
+    agency = AGENCY_BY_ID.get(body.agency_id, {}).get("name", "")
+    title = ""
+    if body.opportunity_id:
+        with db.session() as conn:
+            row = conn.execute("SELECT title FROM opportunities WHERE id=?", (body.opportunity_id,)).fetchone()
+        title = row["title"] if row else body.opportunity_id
+    inner = (f"<p><b>{e(FEEDBACK_KINDS[body.kind])}</b>{' from ' + e(agency) if agency else ''}</p>"
+             f"<p style='white-space:pre-wrap'>{e(body.message)}</p>"
+             + (f"<p>Grant: {e(title)}</p>" if title else "")
+             + (f"<p>Reply to: {e(body.email)}</p>" if body.email else "<p>No reply address given.</p>")
+             + f"<p style='color:#666'>Feedback #{fid}, page: {e(body.page or 'unknown')}</p>")
+    emailer.send(config.FEEDBACK_EMAIL, f"[Feedback] {FEEDBACK_KINDS[body.kind]}{': ' + agency if agency else ''}",
+                 emailer._shell("New feedback", inner))
+
+
+@app.post("/api/feedback")
+def send_feedback(body: FeedbackBody, request: Request):
+    rate_limit(request, "feedback", 10)
+    email = body.email.strip()
+    if email and not emailer.EMAIL_RE.match(email):
+        raise HTTPException(400, "Enter a valid email address, or leave it blank.")
+    if body.agency_id and body.agency_id not in AGENCY_BY_ID:
+        raise HTTPException(400, "Unknown agency")
+    with db.session() as conn:
+        fid = conn.execute(
+            "INSERT INTO feedback(kind, message, email, agency_id, opportunity_id, page) VALUES(?,?,?,?,?,?)",
+            (body.kind, body.message.strip(), email or None, body.agency_id or None,
+             body.opportunity_id or None, body.page or None)).lastrowid
+    if config.FEEDBACK_EMAIL:  # don't make the person wait on the mail server
+        threading.Thread(target=_feedback_email, args=(fid, body), daemon=True).start()
+    return {"ok": True, "id": fid}
+
+
+@app.get("/api/admin/feedback")
+def list_feedback(request: Request, limit: int = 200):
+    if not ADMIN_TOKEN or request.headers.get("x-admin-token") != ADMIN_TOKEN:
+        raise HTTPException(403, "Set ADMIN_TOKEN and send it in the X-Admin-Token header")
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT f.*, o.title AS opportunity_title FROM feedback f
+               LEFT JOIN opportunities o ON o.id = f.opportunity_id
+               ORDER BY f.id DESC LIMIT ?""", (max(1, min(limit, 1000)),)).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ---------------- in-depth research ----------------
+
+class ResearchBody(BaseModel):
+    opportunity_id: str = Field(..., max_length=100)
+    agency_id: str = Field(..., max_length=40)
+    refresh: bool = False
+
+
+def _research_error(e: research.ResearchError):
+    busy = "in progress" in str(e)
+    raise HTTPException(429 if busy else 400, str(e))
+
+
+@app.post("/api/research")
+def start_research(body: ResearchBody, request: Request):
+    """Start reading the notice documents for one grant (or return the saved result). Poll the job."""
+    if body.agency_id not in AGENCY_BY_ID:
+        raise HTTPException(404, "Unknown agency")
+    if not research.available():
+        raise HTTPException(400, "In-depth research needs Azure OpenAI chat (AZURE_CHAT_DEPLOYMENT) to be configured.")
+    if body.refresh or not research.cached(body.opportunity_id, body.agency_id):
+        rate_limit(request, "research", 30)  # each run is a long, paid AI call
+    try:
+        return research.start(body.opportunity_id, body.agency_id, refresh=body.refresh)
+    except research.ResearchError as e:
+        _research_error(e)
+
+
+@app.get("/api/research")
+def get_research(opportunity_id: str, agency_id: str):
+    hit = research.cached(opportunity_id, agency_id)
+    return {"status": "done", "result": hit} if hit else {"status": "none"}
+
+
+@app.get("/api/research/jobs/{job_id}")
+def research_job(job_id: str):
+    j = research.job(job_id)
+    if not j:
+        raise HTTPException(404, "That research run has expired. Start it again.")
+    return {k: j.get(k) for k in ("id", "status", "phase", "result", "error")}
+
+
+@app.get("/api/opportunities/{opportunity_id}/documents/{att_id}")
+def opportunity_document(opportunity_id: str, att_id: str):
+    """Serve a notice attachment from Grants.gov, inline, so the site can show it next to the research."""
+    doc = research.known_document(opportunity_id, att_id)
+    if not doc:
+        try:
+            research.list_documents(opportunity_id)
+        except research.ResearchError as e:
+            raise HTTPException(502, str(e))
+        doc = research.known_document(opportunity_id, att_id)
+    if not doc:
+        raise HTTPException(404, "That document isn't attached to this grant.")
+    try:
+        data = research.download(att_id)
+    except research.ResearchError as e:
+        raise HTTPException(502, str(e))
+    is_pdf = data[:5] == b"%PDF-"
+    name = doc["file_name"] or f"{att_id}.pdf"
+    return Response(data, media_type="application/pdf" if is_pdf else (doc["mime"] or "application/octet-stream"), headers={
+        "Content-Disposition": f"{'inline' if is_pdf else 'attachment'}; filename*=UTF-8''{quote(name)}",
+        "Cache-Control": "private, max-age=86400",
+        "X-Frame-Options": "SAMEORIGIN",
+        "Content-Security-Policy": "frame-ancestors 'self'",
+    })
 
 
 @app.get("/api/metrics")

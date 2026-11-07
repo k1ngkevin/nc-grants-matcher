@@ -1,5 +1,0 @@
-web/node_modules
-web/dist
-server/data
-**/__pycache__
-.env

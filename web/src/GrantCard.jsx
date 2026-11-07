@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ExternalLink } from "lucide-react";
+import { ChevronDown, ExternalLink, FileCheck2, FileSearch, Flag } from "lucide-react";
 import { fmtDate, money, store } from "./api.js";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import ResearchDialog from "./ResearchDialog.jsx";
 
 const LEVEL_LABEL = { strong: "Strong match", good: "Good match", possible: "Possible match" };
 // Strong matches invert to solid pine; weaker ones step down in weight, not hue.
@@ -98,7 +99,7 @@ function Chip({ className, help, children }) {
   );
 }
 
-export default function GrantCard({ result: r, view, agency, meta, onDecide, startExpanded }) {
+export default function GrantCard({ result: r, view, agency, meta, onDecide, startExpanded, onFeedback }) {
   const o = r.opportunity, s = r.signals, g = r.grant_type;
   const [expanded, setExpanded] = useState(!!startExpanded);
   const [panel, setPanel] = useState(null); // "pursue" | "dismiss" | null
@@ -106,7 +107,14 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
   const [msg, setMsg] = useState("");
   const [teamEmail, setTeamEmail] = useState(() => store.get(`team-email:${agency.id}`, ""));
   const [note, setNote] = useState("");
+  const [researchOpen, setResearchOpen] = useState(false);
+  const [researchMounted, setResearchMounted] = useState(false); // keep results after the first open
   const ref = useRef(null);
+  const canResearch = meta.ai?.research;
+  // When this agency last saved research on the grant. Set from search results, and as soon as a run finishes.
+  const [researchAt, setResearchAt] = useState(r.research_at || null);
+  useEffect(() => { if (r.research_at) setResearchAt(r.research_at); }, [r.research_at]);
+  const openResearch = () => { setResearchMounted(true); setResearchOpen(true); };
 
   useEffect(() => {
     if (startExpanded && ref.current) ref.current.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -155,6 +163,7 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
             <span>{o.federal_agency}</span>
             {o.number && <span className="font-mono text-[12px] tabular-nums">{o.number}</span>}
             {o.is_sample ? <Badge className="bg-blaze-tint text-[11px] text-blaze-deep">Sample</Badge> : null}
+            {researchAt && <Badge className="gap-1 bg-pine-100 text-[11px] text-pine"><FileCheck2 className="size-3" /> Researched</Badge>}
           </div>
           <h3 className="mt-1 mb-3 text-[19px] leading-snug font-extrabold tracking-[-0.01em]">
             <a href={o.url} target="_blank" rel="noopener noreferrer" className="text-pine decoration-blaze decoration-2 underline-offset-4 hover:underline">{o.title}</a>
@@ -216,6 +225,24 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
               {view !== "recommended" && (
                 <Button size="sm" variant="ghost" disabled={busy} onClick={() => act("undo")}>Move back to Recommended</Button>
               )}
+              {researchAt ? (
+                // Saved research opens without a new AI run, so it works even when AI isn't configured.
+                <Button size="sm" className="font-extrabold" onClick={openResearch}>
+                  <FileCheck2 /> View research
+                  <span className="font-extralight text-pine-100">{fmtDate(researchAt.slice(0, 10))}</span>
+                </Button>
+              ) : canResearch ? (
+                <Button size="sm" variant="outline" className="border-pine-300 text-pine" onClick={openResearch}>
+                  <FileSearch /> Research this grant
+                </Button>
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span tabIndex={0} className="rounded-md"><Button size="sm" variant="outline" disabled><FileSearch /> Research this grant</Button></span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">Reads the notice PDFs with AI. Needs Azure OpenAI chat to be set up on the server.</TooltipContent>
+                </Tooltip>
+              )}
               <CollapsibleTrigger asChild>
                 <Button size="sm" variant="link" className="px-0 sm:ml-auto">
                   {expanded ? "Hide details" : "Details & how it was scored"}
@@ -264,6 +291,14 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
                           <Progress value={(r.breakdown[key] / meta.weights[key]) * 100} className="col-span-2 h-1.5 bg-muted" aria-label={label} />
                         </div>
                       ))}
+                      {!!r.breakdown.award_type && (
+                        <div className="flex justify-between gap-3 text-[13px]">
+                          <span>{r.breakdown.award_type > 0 ? "Formula / mandatory funding" : "Continuation (usually current grantees only)"}</span>
+                          <span className={cn("font-mono text-[12px] tabular-nums", r.breakdown.award_type > 0 ? "text-pine" : "text-urgent")}>
+                            {r.breakdown.award_type > 0 ? "+" : ""}{r.breakdown.award_type}
+                          </span>
+                        </div>
+                      )}
                       {r.breakdown.feedback !== 0 && (
                         <div className="flex justify-between text-[13px]">
                           <span>Your team's past decisions</span>
@@ -288,16 +323,24 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
                 {o.description && (
                   <p className="mt-4 max-w-[75ch] text-sm text-foreground/85">{o.description.length > 900 ? o.description.slice(0, 900) + "…" : o.description}</p>
                 )}
-                <Button asChild variant="outline" size="sm" className="mt-4">
+                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+                <Button asChild variant="outline" size="sm">
                   <a href={o.url} target="_blank" rel="noopener noreferrer">
                     Open full announcement on {o.source === "sample" ? "Grants.gov (sample link)" : "Grants.gov"} <ExternalLink />
                   </a>
                 </Button>
+                  {onFeedback && (
+                    <Button variant="link" size="sm" className="h-auto p-0 text-muted-foreground hover:text-pine" onClick={onFeedback}>
+                      <Flag /> Report a problem with this grant
+                    </Button>
+                  )}
+                </div>
               </div>
             </CollapsibleContent>
           </Collapsible>
       </div>
     </Card>
+    {researchMounted && <ResearchDialog open={researchOpen} onOpenChange={setResearchOpen} result={r} agency={agency} onDone={setResearchAt} />}
     </div>
   );
 }
