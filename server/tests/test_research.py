@@ -115,3 +115,27 @@ def test_research_needs_azure_chat(client, monkeypatch):
     r = client.post("/api/research", json={"opportunity_id": _opp_id(), "agency_id": "deq"})
     assert r.status_code == 400 and "Azure OpenAI" in r.json()["detail"]
     assert client.get("/api/meta").json()["ai"]["research"] is False
+
+
+def test_question_objects_and_legacy_dict_strings_are_cleaned():
+    question = "What specific collection(s) and activities would you want NEH to fund under this project?"
+    structured = {"question": question, "doc": 1, "page": 4}
+    raw = {"questions": [structured, str(structured), json.dumps(structured), "  Can our agency lead?  "]}
+    assert research._clean_result(raw, [])['questions'] == [question, question, question, "Can our agency lead?"]
+    assert research._clean_result({"questions": [None, 42, {"doc": 1}, "{broken object}"]}, [])['questions'] == []
+    assert research._clean_result({"questions": None}, [])['questions'] == []
+
+
+def test_cached_question_objects_are_repaired_without_another_ai_call(fake, client):
+    question = "Would our agency's collections qualify?"
+    structured = {"question": question, "doc": 1, "page": 4}
+    opp_id = _opp_id()
+    saved = {**AI_ANSWER, "questions": [str(structured), structured]}
+    with db.session() as conn:
+        conn.execute("INSERT OR REPLACE INTO research(opportunity_id, agency_id, result, created_at) VALUES (?, ?, ?, ?)",
+                     (opp_id, "osfm", json.dumps(saved), "2026-11-07T12:00:00+00:00"))
+    result = client.get("/api/research", params={"opportunity_id": opp_id, "agency_id": "osfm"}).json()
+    assert result["result"]["questions"] == [question, question]
+    restarted = client.post("/api/research", json={"opportunity_id": opp_id, "agency_id": "osfm"}).json()
+    assert restarted["status"] == "done" and restarted["result"]["questions"] == [question, question]
+    assert fake == []

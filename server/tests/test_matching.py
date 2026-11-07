@@ -57,7 +57,8 @@ def test_search_preview_keeps_the_numeric_breakdown(matching_db):
         assert r["score"] == max(0, min(100, round(sum(r["breakdown"].values()))))
         preview = r["score_preview"]
         assert r["score"] == max(0, min(100, round(
-            preview["relevance_points"] + preview["practical_points"] + r["breakdown"]["feedback"])))
+            preview["relevance_points"] + preview["practical_points"] + r["breakdown"]["feedback"]
+            + r["breakdown"]["award_type"])))
         assert f"{r['score']}/100" in r["rationale"]
         assert r["rationale_source"] == "rules"
         if preview["caution"]:
@@ -166,3 +167,34 @@ def test_matched_project_beyond_first_eight_is_grounded(captured_chat):
     assert len(facts["active_projects"]) == 8
     assert facts["active_project_count"] == 10
     assert facts["matched_project_details"]["description"] == "Work for project 9"
+
+
+def test_award_type_raises_formula_and_lowers_continuations(matching_db):
+    from app.agencies import AGENCY_BY_ID
+    from app.search import load_agency_context
+    agency, chunks, projects, decisions = load_agency_context("dhhs")
+    with db.session() as conn:
+        base = db.row_to_dict(conn.execute("SELECT * FROM opportunities LIMIT 1").fetchone())
+    scores = {}
+    for cat in ("D", "M", "C", "O"):
+        r = rank(agency, [{**base, "competition": cat}], chunks, projects, decisions)[0]
+        scores[cat] = r
+    assert scores["M"]["breakdown"]["award_type"] == 8 and scores["C"]["breakdown"]["award_type"] == -15
+    assert scores["D"]["breakdown"]["award_type"] == 0 == scores["O"]["breakdown"]["award_type"]
+    d = scores["D"]["score"]
+    assert scores["M"]["score"] == min(100, d + 8) and scores["C"]["score"] == max(0, d - 15)
+    assert "current grantees" in scores["C"]["signals"]["award_type_note"]
+    assert "current grantees" in explain.template_rationale(agency, scores["C"])
+
+
+def test_earmarks_are_hidden_unless_they_name_the_agency():
+    from app import guardrails
+    agency = AGENCY_BY_ID["deq"]
+    opp = {"status": "posted", "close_date": None, "award_ceiling": 500_000, "eligibility_codes": ["00"],
+           "competition": "E", "title": "Coastal resilience project", "description": "Directed to Example University."}
+    assert guardrails.check(opp, agency) == (False, "earmarked for another recipient")
+    assert guardrails.check(opp)[0]  # at ingest there's no agency yet, so it's kept for search to decide
+    named = {**opp, "description": "Congress directed this award to the North Carolina Department of Environmental Quality."}
+    assert guardrails.check(named, agency) == (True, "ok")
+    federal_only = {**opp, "description": "Administered by the U.S. Department of Environmental Quality in Oregon."}
+    assert guardrails.check(federal_only, agency)[0] is False

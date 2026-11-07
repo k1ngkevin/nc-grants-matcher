@@ -10,6 +10,7 @@ Flow (runs in a background thread; the browser polls the job):
 
 Only Grants.gov listings have documents. Other listings are researched from the listing text.
 """
+import ast
 import io
 import json
 import logging
@@ -211,7 +212,8 @@ SYSTEM_PROMPT = (
     "the requirement when the documents state it, else null.\n"
     '  "requirements": up to 10 items {"item", "detail", "doc", "page"}: required application parts, page limits, '
     "match or cost share, registrations, budget rules.\n"
-    '  "questions": up to 4 short questions worth asking the program officer, especially about eligibility gaps.\n'
+    '  "questions": an array of up to 4 plain strings, each a short question worth asking the program officer, '
+    'especially about eligibility gaps. Do not use objects or include doc/page metadata for questions.\n'
     "If there are no documents, say the plan is based on the listing only in verdict_summary, and lean toward "
     '"unclear" unless the listing settles eligibility. Use plain language and no markdown.'
 )
@@ -270,6 +272,33 @@ def _cite(item: dict, docs: list[dict]) -> dict | None:
     return None
 
 
+def _questions(values) -> list[str]:
+    """Accept question objects and repair dict strings produced by older cached runs."""
+    if not isinstance(values, list):
+        return []
+    questions = []
+    for value in values[:4]:
+        if isinstance(value, dict):
+            value = value.get("question")
+        if not isinstance(value, str):
+            continue
+        value = value.strip()
+        if value.startswith("{"):
+            if len(value) > 10_000:
+                continue
+            try:
+                parsed = json.loads(value)
+            except ValueError:
+                try:
+                    parsed = ast.literal_eval(value)  # legacy str(dict), never executable eval
+                except (ValueError, SyntaxError):
+                    continue
+            value = parsed.get("question") if isinstance(parsed, dict) else None
+        if isinstance(value, str) and value.strip():
+            questions.append(value.strip())
+    return questions
+
+
 def _clean_result(raw: dict, docs: list[dict]) -> dict:
     """Keep only well-formed fields; drop quotes that don't appear in the documents."""
     full = [_norm(" ".join(d["pages"])) for d in docs]
@@ -303,7 +332,7 @@ def _clean_result(raw: dict, docs: list[dict]) -> dict:
         "key_dates": items("key_dates", ("label",), 8),
         "timeline": items("timeline", ("title", "detail"), 10),
         "requirements": items("requirements", ("item", "detail"), 10),
-        "questions": [str(q).strip() for q in (raw.get("questions") or [])[:4] if str(q).strip()],
+        "questions": _questions(raw.get("questions")),
     }
 
 
@@ -321,7 +350,11 @@ def cached(opportunity_id: str, agency_id: str) -> dict | None:
     with db.session() as conn:
         row = conn.execute("SELECT result, created_at FROM research WHERE opportunity_id=? AND agency_id=?",
                            (opportunity_id, agency_id)).fetchone()
-    return {**json.loads(row["result"]), "created_at": row["created_at"]} if row else None
+    if not row:
+        return None
+    result = json.loads(row["result"])
+    result["questions"] = _questions(result.get("questions"))
+    return {**result, "created_at": row["created_at"]}
 
 
 def job(job_id: str) -> dict | None:

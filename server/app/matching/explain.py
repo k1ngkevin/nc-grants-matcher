@@ -85,6 +85,9 @@ def template_rationale(agency: dict, result: dict) -> str:
         f"Ranks {result['score']}/100: mission and program relevance contributes {preview['relevance_points']:g}/{preview['relevance_max']}, "
         f"and eligibility, timing and award size contribute {preview['practical_points']:g}/{preview['practical_max']}."
     ]
+    if parts.get("award_type"):
+        bits.append(f"It is {s['award_type_note']}, which {'adds' if parts['award_type'] > 0 else 'subtracts'} "
+                    f"{abs(parts['award_type']):g} points.")
     if parts["feedback"]:
         bits.append(f"Team feedback adds {parts['feedback']:+g} points before the total is rounded and limited to 0–100.")
     if s["matched_project"]:
@@ -142,6 +145,9 @@ def _messages(agency: dict, result: dict, projects: list[dict]) -> list[dict]:
             "Semantic points measure text similarity; program points combine program alignment and shared keywords. "
             "Shared IT, health or research terminology alone does not establish a direct mission fit. "
             "Eligibility, timing and award size can raise the total even when relevance is limited. "
+            "Formula or mandatory listings (competition M) get a bonus because they usually go to every eligible state; "
+            "continuations (competition C) get a penalty because they are usually open only to current grantees, "
+            "so mention that limitation when competition is C. "
             "Check the agency mission, best-matching mission/plan excerpt in mission_evidence, project details and listing purpose. "
             "If the computed label looks too optimistic, explain the specific domain mismatch; "
             "do not force your assessment to agree with the label or invent a replacement score. "

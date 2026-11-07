@@ -280,6 +280,14 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
                           <Progress value={(r.breakdown[key] / meta.weights[key]) * 100} className="col-span-2 h-1.5 bg-muted" aria-label={label} />
                         </div>
                       ))}
+                      {!!r.breakdown.award_type && (
+                        <div className="flex justify-between gap-3 text-[13px]">
+                          <span>{r.breakdown.award_type > 0 ? "Formula / mandatory funding" : "Continuation (usually current grantees only)"}</span>
+                          <span className={cn("font-mono text-[12px] tabular-nums", r.breakdown.award_type > 0 ? "text-pine" : "text-urgent")}>
+                            {r.breakdown.award_type > 0 ? "+" : ""}{r.breakdown.award_type}
+                          </span>
+                        </div>
+                      )}
                       {r.breakdown.feedback !== 0 && (
                         <div className="flex justify-between text-[13px]">
                           <span>Your team's past decisions</span>

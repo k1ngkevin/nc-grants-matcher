@@ -315,6 +315,7 @@ export default function App() {
                   Scores are recommendations. Your team makes every decision. Only grants that are still open, at least{" "}
                   {`$${(meta.financial_floor / 1000).toFixed(0)}K`}, and open to{" "}
                   {agency.applicant === "higher_ed" ? "public colleges and universities" : "state governments"} are shown.
+                  Earmarks directed to another recipient are hidden.
                 </p>
               </section>
             </div>

@@ -95,7 +95,7 @@ replaced on demand when those inputs change; existing rows do not need to be del
 
 See `.env.example` for every setting. Copy it to `.env` in the repo root and the server reads it on startup (real environment variables win). With Docker, use `--env-file`.
 
-**Deploy (Lane A):** push the image to Azure Container Registry, then run it on Azure Container Apps with one replica and an Azure Files volume mounted at `/data`. The daily ingest and email scheduler run inside the app. Put it behind Entra ID sign-in (Container Apps "Authentication") so only state staff can reach it.
+**Deploy the current SQLite version:** run the Docker container on an Azure Linux VM, with `/data` on the VM's persistent OS or managed data disk. Keep one application container: the scheduler and active research jobs run inside that process. Put an HTTPS reverse proxy in front of it. For Azure Container Apps or App Service, migrate the database to PostgreSQL first; the current SQLite WAL database must not live on a network file share. See [Azure deployment notes](docs/azure-deployment.md) for storage, access and migration requirements.
 
 ## Team lanes: what's done and what's next
 
