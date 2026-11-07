@@ -210,7 +210,7 @@ export function EmailSignup({ meta, agency, filters }) {
               <FieldLabel htmlFor="sub-freq">How often</FieldLabel>
               <Select value={frequency} onValueChange={setFrequency}>
                 <SelectTrigger id="sub-freq" className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper" side="bottom" align="start" sideOffset={6}>
                   <SelectItem value="daily">Daily</SelectItem>
                   <SelectItem value="weekly">Weekly</SelectItem>
                   <SelectItem value="biweekly">Every 2 weeks</SelectItem>
