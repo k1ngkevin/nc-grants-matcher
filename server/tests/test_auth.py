@@ -107,10 +107,10 @@ def test_authorized_project_write_and_delete(secured):
     assert secured.delete(path, headers=headers()).status_code == 200
 
 
-def test_email_token_does_not_bypass_agency_access(secured, monkeypatch):
+def test_staff_confirmation_stays_protected(secured, monkeypatch):
     from app import emailer
     monkeypatch.setattr(emailer, "find_subscription", lambda token: {"agency_id": "dhhs"})
-    for action in ("confirm", "unsubscribe"):
+    for action in ("confirm",):
         path = f"/api/subscriptions/{action}?token=test"
         assert secured.get(path, headers=headers()).status_code == 403
         assert secured.post(path, headers=headers()).status_code == 403

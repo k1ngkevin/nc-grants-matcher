@@ -30,7 +30,7 @@ export const api = {
   documents: (agency) => request("GET", `/api/agencies/${agency}/documents`),
   addDocument: (agency, body) => request("POST", `/api/agencies/${agency}/documents`, body),
   deleteDocument: (agency, id) => request("DELETE", `/api/agencies/${agency}/documents/${id}`),
-  subscribe: (body) => request("POST", "/api/subscriptions", body),
+  subscribe: (body) => request("POST", "/api/public/subscriptions", body),
   previewEmail: (body) => request("POST", "/api/subscriptions/preview", body),
   testEmail: (body) => request("POST", "/api/subscriptions/test", body),
 };

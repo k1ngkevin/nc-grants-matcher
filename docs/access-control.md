@@ -13,8 +13,9 @@ An email suffix is not used as proof of employment.
    tenant-specific issuer `https://login.microsoftonline.com/<TENANT-ID>/v2.0`.
    Configure the client ID, client secret using a Container Apps secret reference,
    and callback `https://<APP-HOST>/.auth/login/aad/callback`.
-3. Require authentication for all requests. Use the Microsoft sign-in redirect
-   for the browser. Require HTTPS and restrict accepted token audiences to this
+3. Require authentication for staff requests, with only the public exclusions in
+   [the public signup guide](public-subscriptions.md). Use the Microsoft sign-in redirect
+   for the staff browser. Require HTTPS and restrict accepted token audiences to this
    application. Do not add Graph or unrelated application audiences.
 4. Under the app registration's App roles, create enabled roles with allowed
    member type **Users/Groups**. Values must match exactly:
@@ -56,8 +57,8 @@ The frontend only lists agencies authorized for that signed-in user.
 
 ## Verification before launch
 
-- Anonymous browser: redirected to Microsoft sign-in. Anonymous API callers must
-  not receive API data (the platform may return a redirect instead of JSON).
+- Anonymous staff-site browser: redirected to Microsoft sign-in. Anonymous callers
+  cannot access staff API data. Public signup works at `/subscribe` without sign-in.
 - Wrong tenant, unassigned staff and staff without an agency role: denied.
 - DEQ role: DEQ search, export, projects, documents, decisions and subscriptions
   work; equivalent DHHS calls, including direct API calls and DELETE, return 403.
@@ -68,10 +69,10 @@ The frontend only lists agencies authorized for that signed-in user.
 - Cross-origin writes are rejected. Serve the frontend and API on the configured
   public origin; set PUBLIC_BASE_URL to that exact origin without a trailing slash.
 
-Confirmation/unsubscribe links also require sign-in and agency membership.
-One-click unsubscribe from mail clients without an authenticated session will be
-blocked in this staff-only deployment; the signed-in confirmation page still works.
-Do not broadly exempt subscription endpoints from authentication to bypass this.
+Public subscription confirmation and token-based unsubscribe work without sign-in.
+Staff subscription confirmation still requires sign-in and agency membership.
+Exclude only the specific paths in [the public signup guide](public-subscriptions.md)
+from Easy Auth; do not broadly exempt `/api` or disable staff authentication.
 
 ## Local development
 

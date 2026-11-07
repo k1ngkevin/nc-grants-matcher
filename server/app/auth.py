@@ -14,6 +14,7 @@ from fastapi import HTTPException, Request
 
 from . import config
 from .agencies import AGENCY_BY_ID
+from .public_subscriptions import is_public
 
 
 @dataclass(frozen=True)
@@ -80,7 +81,7 @@ def identity_from_headers(request: Request) -> Identity:
 
 async def authorize_agency(request: Request):
     """Global dependency: every current agency body/path is checked server-side."""
-    if config.AUTH_MODE == "development":
+    if config.AUTH_MODE == "development" or is_public(request):
         return
     identity = request.state.identity
     if request.url.path in {"/api/metrics", "/api/admin/ingest"} and not identity.admin:

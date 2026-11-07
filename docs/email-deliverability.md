@@ -30,9 +30,10 @@ the DNS changes below; changing SMTP_FROM alone does not verify a domain.
    string in the local ignored `.env`, or a Container Apps secret referenced by
    ACS_CONNECTION_STRING in production. Never commit credentials.
 7. Set PUBLIC_BASE_URL to the deployed HTTPS website origin, and restrict
-   ALLOWED_EMAIL_DOMAINS=edu,gov to allow only .edu and .gov recipients, including
-   their subdomains. This recipient rule does not establish NC employment or
-   replace Entra application access controls. Remove gmail.com after testing.
+   ALLOWED_EMAIL_DOMAINS= to allow any recipient. Public signup always accepts
+   all email domains and uses mandatory email confirmation and rate limits;
+   see [public subscriptions](public-subscriptions.md). This does not replace
+   Entra controls for staff APIs.
    Restart the backend after local environment changes.
 
 ## Verify delivery

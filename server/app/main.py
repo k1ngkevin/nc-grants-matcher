@@ -5,8 +5,6 @@ import io
 import logging
 import os
 import threading
-import time
-from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from urllib.parse import quote
 
@@ -15,7 +13,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Streamin
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import auth, config, db, emailer, evaluate
+from . import auth, config, db, emailer, evaluate, public_subscriptions, security
 from .agencies import AGENCIES, AGENCY_BY_ID
 from .ingest import pipeline
 from .matching import embeddings, explain
@@ -79,13 +77,39 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="NC Federal Funds Matchmaker", lifespan=lifespan,
               dependencies=[Depends(auth.authorize_agency)])
+app.include_router(public_subscriptions.router)
 
 
 @app.middleware("http")
 async def authenticate(request: Request, call_next):
     if request.url.path == "/healthz":
         return JSONResponse({"status": "ok"})
-    if config.AUTH_MODE != "development":
+    if len(request.scope.get("query_string", b"")) > 4096:
+        return JSONResponse({"detail": "Query string is too long."}, status_code=414)
+    if request.url.path.startswith("/api/"):
+        try:
+            security.limit("api-global", "all", 600, 60)
+            security.limit("api", security.client_ip(request), 120, 60)
+            if request.url.path in {"/api/search", "/api/export.csv", "/api/subscriptions/preview"}:
+                security.limit("expensive-api", security.client_ip(request), 20, 60)
+        except HTTPException as exc:
+            return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
+    # Enforce the actual streamed size too: Content-Length alone is forgeable.
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        maximum = 16384 if request.url.path.startswith("/api/public/") else 1500000
+        chunks, size = [], 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > maximum:
+                return JSONResponse({"detail": "Request body is too large."}, status_code=413)
+            chunks.append(chunk)
+        request._body = b"".join(chunks)
+        origin = request.headers.get("origin")
+        if origin and origin != config.PUBLIC_BASE_URL:
+            return JSONResponse({"detail": "Cross-origin requests are not allowed."}, status_code=403)
+        if request.url.path in {"/api/public/subscriptions"} and request.headers.get("content-type", "").split(";")[0] != "application/json":
+            return JSONResponse({"detail": "Use application/json."}, status_code=415)
+    if config.AUTH_MODE != "development" and not public_subscriptions.is_public(request):
         try:
             request.state.identity = auth.identity_from_headers(request)
             # Easy Auth uses cookies. Block cross-origin writes and JSON requests
@@ -99,25 +123,13 @@ async def authenticate(request: Request, call_next):
                 } and request.headers.get("content-type", "").split(";")[0] != "application/json" and request.method != "DELETE":
                     raise HTTPException(415, "Use application/json.")
         except HTTPException as exc:
-            return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+            return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
     return await call_next(request)
 
 
 # ---------------- basic hardening ----------------
-_hits: dict[str, deque] = defaultdict(deque)
-_hits_lock = threading.Lock()
-
-
 def rate_limit(request: Request, bucket: str, limit: int, per_seconds: int = 3600):
-    ip = request.client.host if request.client else "unknown"
-    key, now = f"{bucket}:{ip}", time.time()
-    with _hits_lock:
-        q = _hits[key]
-        while q and q[0] < now - per_seconds:
-            q.popleft()
-        if len(q) >= limit:
-            raise HTTPException(429, "Too many requests. Please try again later.")
-        q.append(now)
+    security.limit(bucket, security.client_ip(request), limit, per_seconds)
 
 
 @app.middleware("http")
@@ -126,6 +138,10 @@ async def security_headers(request: Request, call_next):
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["X-Frame-Options"] = "DENY"
     resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if "token" in request.query_params:
+        resp.headers["Referrer-Policy"] = "no-referrer"
+    if request.url.path.startswith("/api/"):
+        resp.headers["Cache-Control"] = "no-store"
     resp.headers["Content-Security-Policy"] = (
         "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; "
         "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
@@ -385,6 +401,8 @@ def unsubscribe(token: str):
 @app.post("/api/subscriptions/test")
 def test_digest(body: SubscribeBody, request: Request):
     rate_limit(request, "test_digest", 5)
+    security.limit("test-recipient", body.email, 3, 3600)
+    security.limit("test-global", "all", 50, 3600)
     _agency(body.agency_id)
     err = emailer.valid_email(body.email)
     if err:
@@ -401,8 +419,8 @@ def test_digest(body: SubscribeBody, request: Request):
 def preview(body: SubscribeBody):
     _agency(body.agency_id)
     f = Filters.from_dict({**body.filters, "agency_id": body.agency_id, "view": "recommended", "sort": "score"})
-    data = search(f, limit=body.top_n, with_llm=True)
-    fake = {"agency_id": body.agency_id, "token": "preview", "frequency": body.frequency, "top_n": body.top_n}
+    data = search(f, limit=body.top_n, public=True)
+    fake = {"agency_id": body.agency_id, "token": "preview", "frequency": body.frequency, "top_n": body.top_n, "public": True, "test": True}
     return HTMLResponse(emailer.digest_html(fake, data))
 
 

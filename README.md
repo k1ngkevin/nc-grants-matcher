@@ -69,7 +69,7 @@ That's a quick live check with the first 100 records. Drop `--max` to load every
 | Human decides | throughout | Nothing is auto-applied. Scores are labeled as recommendations |
 | precision@10 | `app/evaluate.py`, `GET /api/metrics` | Computed from real Pursue/Save/Dismiss labels |
 | Export | "Download CSV" | Current view with scores and reasons |
-| Email alerts | `emailer.py` | Double opt-in, daily/weekly/biweekly/monthly, presets or a custom count of 1–100 grants, ranked by match score using saved filters, optional domain allow-list. Production unsubscribe requires staff sign-in |
+| Email alerts | `emailer.py` | Public double opt-in signup for any email domain, daily/weekly/biweekly/monthly, a custom count of 1–100 grants, saved filters, rate limits and token-based unsubscribe without sign-in |
 
 The card preview separates mission/program relevance (70 possible points) from eligibility, timing and award size (30).
 The additive score and ranking stay the same. A **Good match** label needs a total of at least 50, at least 18/45 semantic points,
@@ -98,6 +98,11 @@ See `.env.example` for every setting. Copy it to `.env` in the repo root and the
 **Deploy (Lane A):** push the image to Azure Container Registry, then run it on Azure Container Apps with one replica and an Azure Files volume mounted at `/data`. The daily ingest and email scheduler run inside the app. Put it behind Entra ID sign-in (Container Apps "Authentication") so only state staff can reach it.
 
 ### Test a grant digest
+
+**Public subscriptions:** anyone can sign up at `/subscribe` and confirm their
+email, regardless of domain. Public digests exclude internal agency projects,
+plans and decisions. See [public signup and API limits](docs/public-subscriptions.md)
+for rate limits, confirmation protections and required Azure authentication exclusions.
 
 For production sender-domain verification and SPF/DKIM setup, follow
 [the email deliverability guide](docs/email-deliverability.md). DNS verification

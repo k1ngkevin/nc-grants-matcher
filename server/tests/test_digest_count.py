@@ -5,13 +5,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import config, db, emailer
-from app.main import app, _hits
+from app.main import app
 from app.search import Filters, search
 
 
 @pytest.fixture
 def client():
-    _hits.clear()
     with TestClient(app) as client:
         yield client
 
@@ -34,7 +33,7 @@ def test_preview_uses_custom_count_and_score_order(client, count):
         "agency_id": "deq", "email": "preview@nc.gov", "top_n": count, "filters": filters,
     })
     assert response.status_code == 200
-    expected = search(Filters.from_dict({**filters, "agency_id": "deq", "sort": "score"}), limit=count)
+    expected = search(Filters.from_dict({**filters, "agency_id": "deq", "sort": "score"}), limit=count, public=True)
     assert response.text.count("Ranking score") == len(expected["results"])
     positions = [response.text.index(html.escape(r["opportunity"]["title"])) for r in expected["results"]]
     assert positions == sorted(positions)

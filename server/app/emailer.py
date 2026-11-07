@@ -74,8 +74,6 @@ def config_problems() -> list[str]:
     if "@example." in config.SMTP_FROM.lower():
         problems.append(f"SMTP_FROM is a placeholder ({config.SMTP_FROM}). Use an address your mail service is allowed "
                         "to send from, or messages will bounce or land in spam.")
-    if not config.ALLOWED_EMAIL_DOMAINS:
-        problems.append("ALLOWED_EMAIL_DOMAINS is empty, so anyone using the site can send email to any address.")
     return problems
 
 
@@ -211,13 +209,16 @@ def _shell(title: str, inner: str, footer: str = "") -> str:
 </table></td></tr></table></body></html>"""
 
 
-def _result_row(r: dict, agency_id: str) -> str:
+def _result_row(r: dict, agency_id: str, public: bool = False) -> str:
     o, s = r["opportunity"], r["signals"]
     e = html.escape
     deadline = "Forecast, not open yet" if s["timing"] == "forecasted" else (
         f"Closes {o['close_date']} ({s['days_left']} days)" if s["days_left"] is not None else "No close date listed")
     urgent = "color:#b42318;font-weight:600" if s["timing"] == "urgent" else "color:#5a6b7d"
     link = f"{config.PUBLIC_BASE_URL}/?agency={agency_id}&opp={o['id']}"
+    if public:
+        candidate = o.get("url") or ""
+        link = candidate if urlparse(candidate).scheme in {"https", "http"} else f"{config.PUBLIC_BASE_URL}/subscribe"
     sample = ' <span style="background:#fff4d6;color:#7a5b00;font-size:11px;padding:1px 6px;border-radius:8px">SAMPLE</span>' if o.get("is_sample") else ""
     return f"""<tr><td style="padding:14px 0;border-top:1px solid #e3e8ef">
 <div style="font-size:12px;color:#5a6b7d">{e(o.get('federal_agency') or '')} &middot; Ranking score <b style="color:#123b68">{r['score']}</b></div>
@@ -242,7 +243,9 @@ def digest_html(sub: dict, data: dict) -> str:
     intro += f"<p>You requested up to {requested} grants, ranked by match score using your saved filters.</p>"
     if len(data["results"]) < requested:
         intro += f"<p>Only {len(data['results'])} grants currently match your filters.</p>"
-    rows = "".join(_result_row(r, agency["id"]) for r in data["results"])
+    if sub.get("public"):
+        intro = intro.replace(f"{site}", f"{config.PUBLIC_BASE_URL}/subscribe").replace("Open the full list, and mark Pursue, Save or Dismiss", "Update your public subscription preferences")
+    rows = "".join(_result_row(r, agency["id"], public=sub.get("public", False)) for r in data["results"])
     footer = (f"You get this {sub['frequency']} because you subscribed on the Matchmaker site. "
               f"Scores are recommendations; your team decides. <a href='{unsub}' style='color:#5a6b7d'>Unsubscribe</a>")
     if sub.get("test"):
@@ -253,8 +256,8 @@ def digest_html(sub: dict, data: dict) -> str:
 def send_test_digest(email: str, agency_id: str, filters: dict, top_n: int) -> dict:
     """Use the real digest renderer and transport without changing subscriptions."""
     f = Filters.from_dict({**filters, "agency_id": agency_id, "view": "recommended", "sort": "score"})
-    data = search(f, limit=top_n, with_llm=True)
-    sub = {"agency_id": agency_id, "top_n": top_n, "frequency": "once", "token": "test", "test": True}
+    data = search(f, limit=top_n, public=True)
+    sub = {"agency_id": agency_id, "top_n": top_n, "frequency": "once", "token": "test", "test": True, "public": True}
     delivery = send(email, f"[Test] {len(data['results'])} federal grants for {data['agency']['short']}", digest_html(sub, data))
     return {"email": email, "top_n": top_n, "grant_count": len(data["results"]),
             "email_enabled": config.EMAIL_ENABLED, "delivery": delivery}
@@ -327,8 +330,11 @@ def unsubscribe(token: str) -> bool:
 
 
 def send_digest(sub: dict) -> dict:
+    with db.session() as conn:
+        public = conn.execute("SELECT 1 FROM public_subscriptions WHERE subscription_id=?", (sub["id"],)).fetchone() is not None
+    sub = {**sub, "public": public}
     f = Filters.from_dict({**sub["filters"], "agency_id": sub["agency_id"], "view": "recommended", "sort": "score"})
-    data = search(f, limit=sub["top_n"], with_llm=True)
+    data = search(f, limit=sub["top_n"], with_llm=not public, public=public)
     now = datetime.now(timezone.utc)
     result = {"delivered": False, "skipped": "no matches"}
     if data["results"]:

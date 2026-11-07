@@ -197,12 +197,12 @@ export function EmailSignup({ meta, agency, filters }) {
     <Card className="gap-3 border-t-4 border-t-pine py-4">
       <CardHeader className="px-4">
         <CardTitle className="flex items-center gap-2"><Mail className="size-4 text-pine" /> Email me the top grants</CardTitle>
-        <CardDescription>The best matches for {agency.short} with the filters you've set. Unsubscribe anytime.</CardDescription>
+        <CardDescription>Public grant matches for {agency.short} with your selected filters. Any email can subscribe; confirm through the emailed link. Internal agency information is excluded.</CardDescription>
       </CardHeader>
       <CardContent className="px-4">
         <form className="flex flex-col gap-3" onSubmit={submit}>
           <div>
-            <FieldLabel htmlFor="sub-email">Work email</FieldLabel>
+            <FieldLabel htmlFor="sub-email">Email address</FieldLabel>
             <Input id="sub-email" type="email" required placeholder="you@agency.nc.gov" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -244,7 +244,7 @@ export function EmailSignup({ meta, agency, filters }) {
             Up to {validCount ? topN : maxGrants} grants per email, highest match score first. If fewer match your filters, we'll send fewer.
             Subscribe again with the same email and agency to update your preferences.
           </p>
-          {meta.allowed_email_domains.length > 0 && <p className="text-[13px] text-muted-foreground">Allowed: {meta.allowed_email_domains.join(", ")}</p>}
+          <a href="/subscribe" className="text-sm text-primary underline">Public email signup (no sign-in required)</a>
           {state.status === "test" && <Alert><AlertDescription>{state.message}</AlertDescription></Alert>}
           {state.status === "error" && (
             <Alert variant="destructive" className="bg-urgent-bg py-2"><AlertDescription>{state.error}</AlertDescription></Alert>
