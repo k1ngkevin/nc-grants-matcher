@@ -95,6 +95,19 @@ See `.env.example` for every setting. Copy it to `.env` in the repo root and the
 
 **Deploy (Lane A):** push the image to Azure Container Registry, then run it on Azure Container Apps with one replica and an Azure Files volume mounted at `/data`. The daily ingest and email scheduler run inside the app. Put it behind Entra ID sign-in (Container Apps "Authentication") so only state staff can reach it.
 
+### Staff sign-in and agency permissions
+
+Production now requires Azure Container Apps Entra authentication. Staff receive
+`Agency.<agency-id>` app roles; administrators receive `Matchmaker.Admin`.
+The API checks tenant and agency permissions, and the agency picker only lists
+authorized agencies. Local Python development remains anonymous by default.
+
+Follow [the access-control setup guide](docs/access-control.md) before deploying:
+it covers app registration, role/group assignments, authentication settings,
+environment variables, ingress restrictions and verification. Docker defaults to
+production authentication; do not pass development authentication values from a
+local `.env` into a production deployment.
+
 ## Team lanes: what's done and what's next
 
 - **Lane A, Cloud & Ops.** Done: Dockerfile, env-based config, in-app daily scheduler. Next: create the Azure resource group, Container Registry, Container App, Azure OpenAI deployments and Entra ID auth. For production, move SQLite → Azure Database for PostgreSQL and the in-memory vector index → Azure AI Search (same inputs/outputs; see `matching/embeddings.py`).
@@ -107,7 +120,7 @@ See `.env.example` for every setting. Copy it to `.env` in the repo root and the
 - **Live APIs are untested from our build machine.** Its network blocked api.grants.gov and api.usaspending.gov. The Grants.gov parser was written against the documented response shape and reads fields defensively, but run `python -m app.ingest --max 50` first and check the results. The **SAM.gov endpoint is the least certain**; check it with `python -m app.ingest --sam-check 66.460`, and set `SAM_ASSISTANCE_URL` if it differs.
 - **The sample dataset is invented** (numbers start with `SAMPLE-`). It's for demos and tests only.
 - **Agency mission summaries and program lists were written by the team** from public descriptions. Have each agency correct them.
-- **No login in the app itself.** Put it behind Entra ID before real use. All data is public federal grant data plus whatever projects and plans agencies type in.
+- **Production login requires Azure setup.** The app enforces tenant and agency roles from Container Apps Easy Auth; configure it using [the access-control guide](docs/access-control.md). Local development remains anonymous.
 
 ## 6-minute pitch outline
 
