@@ -5,6 +5,8 @@
   15  Eligibility    how clearly the agency's applicant type is eligible
   10  Timing         workable deadline (urgent but doable > comfortable > far off > forecast)
    5  Award size     bigger awards rank slightly higher (log scale)
+ +/-  Award type     Grants.gov category: formula/mandatory +8, continuation -15 (earmarks are
+                     screened out before scoring; see guardrails.py)
  +/-  Team feedback  learned from this agency's Pursue / Save / Dismiss history (capped)
 
 Every component is returned so the UI can show exactly why something ranked where it did.
@@ -20,6 +22,14 @@ from . import embeddings
 
 WEIGHTS = {"semantic": 45, "program": 25, "eligibility": 15, "timing": 10, "size": 5}
 MATCH_LABELS = {"strong": "Strong match", "good": "Good match", "possible": "Possible match"}
+# Grants.gov opportunity category (D discretionary, M mandatory, C continuation, E earmark, O other).
+# Formula/mandatory money flows to eligible states, so it moves up about one tier; continuations are
+# usually limited to current grantees, so they sink unless the fit is very strong. D and O are neutral.
+AWARD_TYPE_POINTS = {"M": 8, "C": -15}
+AWARD_TYPE_NOTES = {
+    "M": "formula or mandatory funding, which usually goes to every eligible state",
+    "C": "a continuation, which is usually open only to current grantees",
+}
 
 
 def assess_match(score: int, parts: dict) -> dict:
@@ -174,6 +184,7 @@ def rank(agency: dict, opps: list[dict], profile_chunks: list[str], projects: li
             "timing": round(WEIGHTS["timing"] * timing, 1),
             "size": round(WEIGHTS["size"] * size, 1),
         }
+        parts["award_type"] = AWARD_TYPE_POINTS.get(o.get("competition"), 0)
         adj, fb_notes = feedback_adjustment(o, fb, cat, amount)
         parts["feedback"] = round(adj, 1)
         total = max(0, min(100, round(sum(parts.values()))))
@@ -196,6 +207,7 @@ def rank(agency: dict, opps: list[dict], profile_chunks: list[str], projects: li
                 "days_left": d,
                 "amount": amount,
                 "feedback_notes": fb_notes,
+                "award_type_note": AWARD_TYPE_NOTES.get(o.get("competition")),
             },
         })
     results.sort(key=lambda r: (-r["score"], r["signals"]["days_left"] if r["signals"]["days_left"] is not None else 999))

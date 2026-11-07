@@ -1,0 +1,45 @@
+# Three services: db (PostgreSQL), api (FastAPI), web (nginx + the built React site).
+#   docker compose up --build        then open http://localhost:8000
+# Only the web service is published; it forwards /api to the api service.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: matchmaker
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-matchmaker}
+      POSTGRES_DB: matchmaker
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U matchmaker -d matchmaker"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build: ./server
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://matchmaker:${POSTGRES_PASSWORD:-matchmaker}@db:5432/matchmaker
+      FORWARDED_ALLOW_IPS: "*"   # only reachable through the web service, so trust its X-Forwarded-For
+    volumes:
+      - apidata:/data              # email outbox when no mail server is set
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build: ./web
+    ports:
+      - "${WEB_PORT:-8000}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  apidata:

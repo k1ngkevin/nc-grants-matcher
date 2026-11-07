@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { AlertTriangle, BookOpen, Download, Loader2 } from "lucide-react";
+import { AlertTriangle, BookOpen, Download, Loader2, MessageSquarePlus } from "lucide-react";
 import { api, fmtDate, store } from "./api.js";
 import GrantCard from "./GrantCard.jsx";
 import ScoreFilter from "./ScoreFilter.jsx";
@@ -8,6 +8,7 @@ import { EmailSignup, Filters, ImproveMatches } from "./Sidebar.jsx";
 import Glossary from "./Glossary.jsx";
 import AgencyPicker, { BridgeMark } from "./AgencyPicker.jsx";
 import ContourField from "./ContourField.jsx";
+import FeedbackDialog from "./FeedbackDialog.jsx";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showGlossary, setShowGlossary] = useState(false);
+  const [feedback, setFeedback] = useState({ open: false, opportunity: null, kind: "problem" });
+  const openFeedback = (opportunity = null, kind = "problem") => setFeedback({ open: true, opportunity, kind });
   const [focusOpp, setFocusOpp] = useState(() => urlParams().opp);
   const [debouncedQ, setDebouncedQ] = useState("");
   const reqId = useRef(0);
@@ -179,14 +182,14 @@ export default function App() {
     return (
       <Backdrop>
         <p className="flex items-center gap-2 text-sm text-fog/80">
-          <Loader2 className="size-4 animate-spin motion-reduce:animate-none" /> Loading open grants
+          <Loader2 className="size-4 animate-spin motion-reduce:[animation-duration:2s]" /> Loading open grants
         </p>
       </Backdrop>
     );
   }
 
   const counts = data?.counts || {};
-  const topBar = <TopBar meta={meta} onHome={goHome} onGlossary={() => setShowGlossary(true)} />;
+  const topBar = <TopBar meta={meta} onHome={goHome} onGlossary={() => setShowGlossary(true)} onFeedback={() => openFeedback()} />;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -300,7 +303,8 @@ export default function App() {
                     .map((r) => (
                       <li key={r.opportunity.id}>
                         <GrantCard result={r} view={view} agency={agency} meta={meta}
-                          onDecide={decide} startExpanded={r.opportunity.id === focusOpp} />
+                          onDecide={decide} startExpanded={r.opportunity.id === focusOpp}
+                          onFeedback={() => openFeedback(r.opportunity, "scoring")} />
                       </li>
                     ))}
                 </ol>
@@ -315,6 +319,7 @@ export default function App() {
                   Scores are recommendations. Your team makes every decision. Only grants that are still open, at least{" "}
                   {`$${(meta.financial_floor / 1000).toFixed(0)}K`}, and open to{" "}
                   {agency.applicant === "higher_ed" ? "public colleges and universities" : "state governments"} are shown.
+                  Earmarks directed to another recipient are hidden.
                 </p>
               </section>
             </div>
@@ -323,11 +328,13 @@ export default function App() {
       )}
 
       <Glossary meta={meta} open={showGlossary} onOpenChange={setShowGlossary} />
+      <FeedbackDialog open={feedback.open} onOpenChange={(open) => setFeedback((f) => ({ ...f, open }))}
+        agency={agency} opportunity={feedback.opportunity} initialKind={feedback.kind} page={agency ? view : "landing"} />
     </div>
   );
 }
 
-function TopBar({ meta, onHome, onGlossary }) {
+function TopBar({ meta, onHome, onGlossary, onFeedback }) {
   const last = meta.last_ingest;
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-4 sm:px-6">
@@ -336,7 +343,7 @@ function TopBar({ meta, onHome, onGlossary }) {
         <BridgeMark className="size-9 shrink-0" />
         <span className="text-[17px] leading-tight font-extrabold tracking-[-0.01em]">NC Federal Funds Matchmaker</span>
       </a>
-      <div className="flex items-center gap-5">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
         {last && (
           <span className="hidden text-[13px] text-fog/65 md:inline" title={`Source: ${last.source}`}>
             {meta.opportunity_count.toLocaleString()} open grants, updated {fmtDate(last.as_of)}
@@ -344,6 +351,9 @@ function TopBar({ meta, onHome, onGlossary }) {
         )}
         <Button variant="ghost" size="sm" className="text-fog hover:bg-fog/10 hover:text-fog focus-visible:ring-blaze/60" onClick={onGlossary}>
           <BookOpen /> Grant types explained
+        </Button>
+        <Button variant="ghost" size="sm" className="text-fog hover:bg-fog/10 hover:text-fog focus-visible:ring-blaze/60" onClick={onFeedback}>
+          <MessageSquarePlus /> Feedback
         </Button>
       </div>
     </div>

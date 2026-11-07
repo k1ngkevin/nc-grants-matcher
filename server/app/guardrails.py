@@ -1,4 +1,4 @@
-"""The four mandatory guardrails, in one place so ingest and search apply the same rules.
+"""The mandatory guardrails, in one place so ingest and search apply the same rules.
 Ingest drops what can never qualify; search re-applies the rules daily (dates move)."""
 from datetime import date
 
@@ -29,4 +29,14 @@ def check(opp: dict, agency: dict | None = None, floor: int = FINANCIAL_FLOOR,
             return False, "not eligible"
     elif not set(codes) & {"00", "06", "25", "99"}:
         return False, "not eligible for state government or public higher ed"
+    # 4. Earmarks (category E) are directed to a named recipient, so no one else can apply.
+    #    Kept only when the listing itself names this agency (and North Carolina).
+    if agency is not None and opp.get("competition") == "E" and not names_agency(opp, agency):
+        return False, "earmarked for another recipient"
     return True, "ok"
+
+
+def names_agency(opp: dict, agency: dict) -> bool:
+    text = f"{opp.get('title') or ''} {opp.get('description') or ''} {opp.get('eligibility_text') or ''}".lower()
+    # Federal departments share names with state ones ("Department of Commerce"), so require North Carolina too.
+    return "north carolina" in text and agency["name"].lower() in text
