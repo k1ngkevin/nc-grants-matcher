@@ -219,7 +219,7 @@ def _result_row(r: dict, agency_id: str) -> str:
     link = f"{config.PUBLIC_BASE_URL}/?agency={agency_id}&opp={o['id']}"
     sample = ' <span style="background:#fff4d6;color:#7a5b00;font-size:11px;padding:1px 6px;border-radius:8px">SAMPLE</span>' if o.get("is_sample") else ""
     return f"""<tr><td style="padding:14px 0;border-top:1px solid #e3e8ef">
-<div style="font-size:12px;color:#5a6b7d">{e(o.get('federal_agency') or '')} &middot; Match score <b style="color:#123b68">{r['score']}</b></div>
+<div style="font-size:12px;color:#5a6b7d">{e(o.get('federal_agency') or '')} &middot; Ranking score <b style="color:#123b68">{r['score']}</b></div>
 <a href="{e(link)}" style="font-size:16px;font-weight:600;color:#123b68;text-decoration:none">{e(o['title'])}</a>{sample}
 <div style="font-size:13px;margin:4px 0;{urgent}">{e(deadline)} &middot; Up to {money(s['amount'])} &middot; {e(r['grant_type']['competition'])} &middot; {e(r['grant_type']['match'])}</div>
 <div style="font-size:14px;line-height:1.45">{e(r['rationale'])}</div></td></tr>"""
@@ -347,7 +347,7 @@ def route_to_team(to: str, agency_id: str, result: dict, note: str, reviewer: st
     inner = (f"<p>{e(reviewer or 'A reviewer')} marked this opportunity <b>Pursue</b> for {e(AGENCY_BY_ID[agency_id]['name'])}.</p>"
              f"<p style='font-size:16px'><b>{e(o['title'])}</b><br>{e(o.get('federal_agency') or '')} &middot; {e(o.get('number') or '')}</p>"
              f"<p>Deadline: {e(o.get('close_date') or 'not listed')} &middot; Up to {money(s['amount'])} &middot; Score {result['score']}</p>"
-             f"<p><b>Why it fits:</b> {e(result.get('rationale', ''))}</p>"
+             f"<p><b>Match preview:</b> {e(result.get('rationale', ''))}</p>"
              + (f"<p><b>Reviewer note:</b> {e(note)}</p>" if note else "")
              + f"<p><a href='{e(o.get('url') or '')}' style='color:#123b68'>Full announcement</a></p>")
     return send(to, f"[Pursue] {o['title']}", _shell("New grant to pursue", inner))

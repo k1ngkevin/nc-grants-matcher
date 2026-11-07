@@ -19,6 +19,34 @@ from ..normalize import best_award_amount, days_left, timing_category
 from . import embeddings
 
 WEIGHTS = {"semantic": 45, "program": 25, "eligibility": 15, "timing": 10, "size": 5}
+MATCH_LABELS = {"strong": "Strong match", "good": "Good match", "possible": "Possible match"}
+
+
+def assess_match(score: int, parts: dict) -> dict:
+    """Keep practical points from turning limited relevance into a positive match label.
+
+    The numeric score stays additive so its breakdown and ordering remain transparent.
+    Good needs 40% semantic fit and 50% of relevance points; Strong needs 60% and 70%.
+    These are screening thresholds, not a prediction of application success.
+    """
+    relevance_max = WEIGHTS["semantic"] + WEIGHTS["program"]
+    practical_max = WEIGHTS["eligibility"] + WEIGHTS["timing"] + WEIGHTS["size"]
+    relevance = round(parts["semantic"] + parts["program"], 1)
+    practical = round(sum(parts[k] for k in ("eligibility", "timing", "size")), 1)
+    enough_relevance = parts["semantic"] >= 0.4 * WEIGHTS["semantic"] and relevance >= 0.5 * relevance_max
+    strong_relevance = parts["semantic"] >= 0.6 * WEIGHTS["semantic"] and relevance >= 0.7 * relevance_max
+    level = "strong" if score >= 70 and strong_relevance else "good" if score >= 50 and enough_relevance else "possible"
+    return {
+        "match_level": level,
+        "score_preview": {
+            "relevance_points": relevance,
+            "relevance_max": relevance_max,
+            "practical_points": practical,
+            "practical_max": practical_max,
+            "caution": ("Limited mission or program relevance. Eligibility, timing and award size also contribute to the score."
+                        if not enough_relevance else None),
+        },
+    }
 
 DISMISS_REASONS = {
     "not_relevant": "Not relevant to our mission",
@@ -102,16 +130,18 @@ def rank(agency: dict, opps: list[dict], profile_chunks: list[str], projects: li
 
     def similarities(index):
         cols = [index.pos[o["id"]] for o in opps if o["id"] in index.pos]
-        prof = index.similarities(profile_chunks)[:, cols].max(axis=0) if profile_chunks else [0.0] * len(cols)
+        profile_sims = index.similarities(profile_chunks)[:, cols] if profile_chunks else None
+        prof = profile_sims.max(axis=0) if profile_sims is not None else [0.0] * len(cols)
+        evidence = [profile_chunks[int(k)][:1000] for k in profile_sims.argmax(axis=0)] if profile_sims is not None else [""] * len(cols)
         proj = index.similarities([p["title"] + ". " + p["description"] for p in projects])[:, cols] if projects else None
-        return [o for o in opps if o["id"] in index.pos], prof, proj
+        return [o for o in opps if o["id"] in index.pos], prof, proj, evidence
 
     index = embeddings.get_index()
     try:
-        opps, prof, proj_sims = similarities(index)
+        opps, prof, proj_sims, mission_evidence = similarities(index)
     except embeddings.EmbeddingError:
         index = embeddings.get_index()  # Azure is cooling down now, so this is the local TF-IDF index
-        opps, prof, proj_sims = similarities(index)
+        opps, prof, proj_sims, mission_evidence = similarities(index)
     fb = feedback_model(decisions)
 
     results = []
@@ -152,9 +182,12 @@ def rank(agency: dict, opps: list[dict], profile_chunks: list[str], projects: li
             "opportunity": o,
             "score": total,
             "breakdown": parts,
+            **assess_match(total, parts),
             "signals": {
                 "mission_fit": round(mission, 2),
                 "project_fit": round(proj_fit, 2),
+                "mission_evidence": mission_evidence[j],
+                "similarity_method": index.kind,
                 "matched_project": {"id": best_proj["id"], "title": best_proj["title"]} if best_proj else None,
                 "matched_keywords": hits[:6],
                 "matched_program": aln,

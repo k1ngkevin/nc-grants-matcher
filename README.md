@@ -57,19 +57,30 @@ That's a quick live check with the first 100 records. Drop `--max` to load every
 | Strategic plans | "Improve your matches" panel → `agency_documents` | Paste or upload plan text. It's split into chunks and embedded, and the best-matching chunk counts toward mission fit |
 | Project intake | same panel → `projects` | Staff log active projects. A grant that fits a project gets a boost and names the project in its explanation |
 | Blended score | `matching/score.py` | 45 mission + project similarity · 25 program fit (an Assistance Listing the agency usually receives + keywords) · 15 eligibility · 10 timing · 5 award size · ± feedback. Every part is shown under "Details & how it was scored" |
-| Explanations | `matching/explain.py` | Rule-based by default (instant, free). With Azure OpenAI configured, the top 10 get LLM-written rationales grounded in the listing, cached |
+| Explanations | `matching/explain.py` | Rule-based by default (instant, free). With Azure OpenAI configured, the first 5 results per page get AI previews grounded in the listing, agency/project/plan context and score breakdown. Cached by the prompt, context, score and deployment |
 | Pursue / Save / Dismiss | `GrantCard.jsx`, `POST /api/decisions` | Pursue can email the opportunity and a note to the grant-writing team. Dismiss asks for a reason (e.g. "Can't meet the match"), and those reasons adjust future scores for that agency |
 | Human decides | throughout | Nothing is auto-applied. Scores are labeled as recommendations |
 | precision@10 | `app/evaluate.py`, `GET /api/metrics` | Computed from real Pursue/Save/Dismiss labels |
 | Export | "Download CSV" | Current view with scores and reasons |
 | Email alerts | `emailer.py` | Double opt-in, daily/weekly/biweekly/monthly, top 5–25, uses the filters set at signup, one-click unsubscribe, optional domain allow-list |
 
+The card preview separates mission/program relevance (70 possible points) from eligibility, timing and award size (30).
+The additive score and ranking stay the same. A **Good match** label needs a total of at least 50, at least 18/45 semantic points,
+and 35/70 relevance points. **Strong match** needs 70 total, 27/45 semantic and 49/70 relevance points. Otherwise the label is
+**Possible match**, including high totals driven by practical factors or feedback. These screening thresholds still need validation
+with agency reviewers; text similarity can overstate substantive relevance.
+
+AI previews receive the score, component points, matching mission/plan excerpt, project details and listing facts. They explain
+why points were awarded and flag domain mismatches even when the computed label is optimistic. Empty project lists are treated
+as missing context. Explanations are cached by their exact prompt/context/score and chat deployment, so old summaries are
+replaced on demand when those inputs change; existing rows do not need to be deleted or migrated.
+
 ### Azure (optional; everything works without it)
 
 | Set these | What changes |
 |---|---|
 | `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, `AZURE_EMBEDDING_DEPLOYMENT` | Similarity switches from local TF-IDF to Azure OpenAI embeddings once every opportunity has a vector. Vectors are computed at ingest; for data loaded before you set these, run `cd server && python -m app.ingest --embed`. If Azure fails (wrong deployment name, bad key), matching falls back to TF-IDF and the server log says why. Re-tune `CALIBRATION` in `matching/embeddings.py` for your embedding model |
-| `AZURE_CHAT_DEPLOYMENT` | AI-written "Why it fits" for the top 10 results and in emails |
+| `AZURE_CHAT_DEPLOYMENT` | AI-written match previews for the first 5 results per page and in emails |
 | `ACS_CONNECTION_STRING` | Real email through the Azure Communication Services email API, using the connection string from the resource's Keys page. No SMTP login or Entra app needed. Set `SMTP_FROM` to the email domain's MailFrom address. ACS Email is being retired September 30, 2028 |
 | `SMTP_*` | Real email through SendGrid, Azure Communication Services (being retired September 30, 2028) or any SMTP relay. Microsoft is retiring password sign-in for SMTP in Exchange Online, so check with IT before using an Office 365 mailbox. Without it, emails go to `server/data/outbox/`. Test the settings with `cd server && python -m app.emailer you@agency.nc.gov` |
 | `SAM_API_KEY` | SAM.gov program descriptions are added to the matching text |

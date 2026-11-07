@@ -23,8 +23,8 @@ const TIMING_STYLE = {
   forecasted: "bg-forecast-bg text-forecast",
 };
 const PART_LABELS = [
-  ["semantic", "Fits your mission & projects"],
-  ["program", "Program you usually receive / key topics"],
+  ["semantic", "Mission & project text similarity"],
+  ["program", "Program alignment & shared topics"],
   ["eligibility", "Eligibility"],
   ["timing", "Timing"],
   ["size", "Award size"],
@@ -100,7 +100,7 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
     )}>
       <div className="flex gap-4 p-4 sm:p-5">
         <div className={cn("flex w-[68px] shrink-0 flex-col items-center self-start rounded-lg px-1 pt-2 pb-1.5 text-center sm:w-[76px]", LEVEL_STYLE[r.match_level])}
-          title="Match score out of 100">
+          title="Ranking score out of 100. Match labels also require mission and program relevance.">
           <span className="text-[26px] leading-none font-bold tabular-nums">{r.score}</span>
           <span className="mt-1 text-[11px] leading-tight font-semibold">{LEVEL_LABEL[r.match_level]}</span>
         </div>
@@ -123,7 +123,20 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
           </div>
 
           <div className="mt-4 max-w-[75ch]">
-            <p className="text-[13px] font-semibold text-muted-foreground">Why it fits{r.rationale_source === "ai" ? " (AI summary)" : ""}</p>
+            {r.score_preview && (
+              <dl className="mb-3 grid gap-2 text-[13px] sm:grid-cols-2">
+                <div className="rounded-md bg-muted/60 px-3 py-2">
+                  <dt className="text-muted-foreground">Mission & program relevance</dt>
+                  <dd className="mt-0.5 font-semibold tabular-nums">{r.score_preview.relevance_points}/{r.score_preview.relevance_max} points</dd>
+                </div>
+                <div className="rounded-md bg-muted/60 px-3 py-2">
+                  <dt className="text-muted-foreground">Eligibility, timing & award size</dt>
+                  <dd className="mt-0.5 font-semibold tabular-nums">{r.score_preview.practical_points}/{r.score_preview.practical_max} points</dd>
+                </div>
+              </dl>
+            )}
+            {r.score_preview?.caution && <p className="mb-2 text-[13px] font-medium text-gold">{r.score_preview.caution}</p>}
+            <p className="text-[13px] font-semibold text-muted-foreground">Match preview{r.rationale_source === "ai" ? " (AI summary)" : ""}</p>
             <p className="mt-0.5">{withBold(r.rationale)}</p>
             {s.feedback_notes?.length > 0 && <p className="mt-1 text-[13px] text-muted-foreground italic">Adjusted because {s.feedback_notes.join("; ")}.</p>}
           </div>
@@ -188,7 +201,8 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
               <div className="mt-4 border-t pt-4">
                 <div className="grid gap-6 md:grid-cols-2">
                   <div>
-                    <h4 className="mb-3 text-sm font-semibold">Score breakdown ({r.score}/100)</h4>
+                    <h4 className="mb-1 text-sm font-semibold">Ranking score breakdown ({r.score}/100)</h4>
+                    <p className="mb-3 text-[13px] text-muted-foreground">Use these signals to prioritize review and confirm that the funded activities fit your agency.</p>
                     <div className="flex flex-col gap-2.5">
                       {PART_LABELS.map(([key, label]) => (
                         <div key={key} className="grid grid-cols-[1fr_44px] items-center gap-x-3 gap-y-1 text-[13px]">

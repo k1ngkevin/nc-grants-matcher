@@ -121,7 +121,6 @@ def search(f: Filters, limit: int = 50, offset: int = 0, with_llm: bool = False)
         r["rationale_source"] = "ai" if ai_text else "rules"
         r["grant_type"] = grant_type(o.get("funding_instruments"), o.get("competition"), o.get("cost_sharing"))
         r["timing_label"] = TIMING_LABELS.get(r["signals"]["timing"], "")
-        r["match_level"] = "strong" if r["score"] >= 70 else "good" if r["score"] >= 50 else "possible"
         o.pop("embedding", None)
 
     return {

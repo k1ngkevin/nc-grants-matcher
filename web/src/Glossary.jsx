@@ -55,7 +55,9 @@ export default function Glossary({ meta, open, onOpenChange }) {
             <p className="text-sm text-muted-foreground">
               Out of 100: fit with your mission and active projects ({meta.weights.semantic}), whether it's a federal program your agency usually receives plus key topics ({meta.weights.program}),
               eligibility ({meta.weights.eligibility}), timing ({meta.weights.timing}) and award size ({meta.weights.size}). Your team's Pursue, Save and Dismiss decisions nudge future scores.
-              The score is a recommendation. People make the decisions.
+              {" "}Good and Strong labels also require enough mission/project similarity and combined mission and program relevance.
+              {" "}The preview separates mission and program relevance from practical factors. AI summaries explain the breakdown and flag gaps in the listing.
+              The score helps prioritize review. People make the decisions.
             </p>
           </Section>
           <Section title="Where the data comes from">
