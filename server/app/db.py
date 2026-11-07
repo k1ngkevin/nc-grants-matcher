@@ -80,6 +80,21 @@ CREATE TABLE IF NOT EXISTS explanations (
     text TEXT NOT NULL,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS research (     -- in-depth research results, one per grant and agency
+    opportunity_id TEXT NOT NULL,
+    agency_id TEXT NOT NULL,
+    result TEXT NOT NULL,             -- JSON
+    created_at TEXT,
+    PRIMARY KEY (opportunity_id, agency_id)
+);
+CREATE TABLE IF NOT EXISTS opportunity_documents (  -- notice attachments, so the PDF proxy only serves real ones
+    opportunity_id TEXT NOT NULL,
+    att_id TEXT NOT NULL,
+    file_name TEXT,
+    mime TEXT,
+    size INTEGER,
+    PRIMARY KEY (opportunity_id, att_id)
+);
 CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT

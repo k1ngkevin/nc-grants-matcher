@@ -11,11 +11,11 @@ from contextlib import asynccontextmanager
 from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import config, db, emailer, evaluate
+from . import config, db, emailer, evaluate, research
 from .agencies import AGENCIES, AGENCY_BY_ID
 from .ingest import pipeline
 from .matching import embeddings, explain
@@ -99,12 +99,13 @@ def rate_limit(request: Request, bucket: str, limit: int, per_seconds: int = 360
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     resp = await call_next(request)
-    resp.headers["X-Content-Type-Options"] = "nosniff"
-    resp.headers["X-Frame-Options"] = "DENY"
-    resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    resp.headers["Content-Security-Policy"] = (
+    # setdefault: a route may set its own framing rules (the notice PDFs are shown in an iframe on this site).
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    resp.headers.setdefault("Content-Security-Policy", (
         "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; "
-        "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+        "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"))
     return resp
 
 
@@ -181,7 +182,8 @@ def meta():
         "email_enabled": config.EMAIL_ENABLED,
         "email_confirmation": config.REQUIRE_EMAIL_CONFIRMATION,
         "allowed_email_domains": config.ALLOWED_EMAIL_DOMAINS,
-        "ai": {"embeddings": embeddings.active_backend(), "explanations": "azure-openai" if explain.available() else "rules"},
+        "ai": {"embeddings": embeddings.active_backend(), "explanations": "azure-openai" if explain.available() else "rules",
+               "research": research.available()},
         "dismiss_reasons": DISMISS_REASONS,
         "weights": WEIGHTS,
         "glossary": {
@@ -363,6 +365,74 @@ def preview(body: SubscribeBody):
     data = search(f, limit=body.top_n, with_llm=True)
     fake = {"agency_id": body.agency_id, "token": "preview", "frequency": body.frequency}
     return HTMLResponse(emailer.digest_html(fake, data))
+
+
+# ---------------- in-depth research ----------------
+
+class ResearchBody(BaseModel):
+    opportunity_id: str = Field(..., max_length=100)
+    agency_id: str = Field(..., max_length=40)
+    refresh: bool = False
+
+
+def _research_error(e: research.ResearchError):
+    busy = "in progress" in str(e)
+    raise HTTPException(429 if busy else 400, str(e))
+
+
+@app.post("/api/research")
+def start_research(body: ResearchBody, request: Request):
+    """Start reading the notice documents for one grant (or return the saved result). Poll the job."""
+    if body.agency_id not in AGENCY_BY_ID:
+        raise HTTPException(404, "Unknown agency")
+    if not research.available():
+        raise HTTPException(400, "In-depth research needs Azure OpenAI chat (AZURE_CHAT_DEPLOYMENT) to be configured.")
+    if body.refresh or not research.cached(body.opportunity_id, body.agency_id):
+        rate_limit(request, "research", 30)  # each run is a long, paid AI call
+    try:
+        return research.start(body.opportunity_id, body.agency_id, refresh=body.refresh)
+    except research.ResearchError as e:
+        _research_error(e)
+
+
+@app.get("/api/research")
+def get_research(opportunity_id: str, agency_id: str):
+    hit = research.cached(opportunity_id, agency_id)
+    return {"status": "done", "result": hit} if hit else {"status": "none"}
+
+
+@app.get("/api/research/jobs/{job_id}")
+def research_job(job_id: str):
+    j = research.job(job_id)
+    if not j:
+        raise HTTPException(404, "That research run has expired. Start it again.")
+    return {k: j.get(k) for k in ("id", "status", "phase", "result", "error")}
+
+
+@app.get("/api/opportunities/{opportunity_id}/documents/{att_id}")
+def opportunity_document(opportunity_id: str, att_id: str):
+    """Serve a notice attachment from Grants.gov, inline, so the site can show it next to the research."""
+    doc = research.known_document(opportunity_id, att_id)
+    if not doc:
+        try:
+            research.list_documents(opportunity_id)
+        except research.ResearchError as e:
+            raise HTTPException(502, str(e))
+        doc = research.known_document(opportunity_id, att_id)
+    if not doc:
+        raise HTTPException(404, "That document isn't attached to this grant.")
+    try:
+        data = research.download(att_id)
+    except research.ResearchError as e:
+        raise HTTPException(502, str(e))
+    is_pdf = data[:5] == b"%PDF-"
+    name = doc["file_name"] or f"{att_id}.pdf"
+    return Response(data, media_type="application/pdf" if is_pdf else (doc["mime"] or "application/octet-stream"), headers={
+        "Content-Disposition": f"{'inline' if is_pdf else 'attachment'}; filename*=UTF-8''{quote(name)}",
+        "Cache-Control": "private, max-age=86400",
+        "X-Frame-Options": "SAMEORIGIN",
+        "Content-Security-Policy": "frame-ancestors 'self'",
+    })
 
 
 @app.get("/api/metrics")

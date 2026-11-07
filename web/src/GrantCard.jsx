@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ExternalLink } from "lucide-react";
+import { ChevronDown, ExternalLink, FileSearch } from "lucide-react";
 import { fmtDate, money, store } from "./api.js";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import ResearchDialog from "./ResearchDialog.jsx";
 
 const LEVEL_LABEL = { strong: "Strong match", good: "Good match", possible: "Possible match" };
 // Strong matches invert to solid pine; weaker ones step down in weight, not hue.
@@ -106,7 +107,10 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
   const [msg, setMsg] = useState("");
   const [teamEmail, setTeamEmail] = useState(() => store.get(`team-email:${agency.id}`, ""));
   const [note, setNote] = useState("");
+  const [researchOpen, setResearchOpen] = useState(false);
+  const [researchMounted, setResearchMounted] = useState(false); // keep results after the first open
   const ref = useRef(null);
+  const canResearch = meta.ai?.research;
 
   useEffect(() => {
     if (startExpanded && ref.current) ref.current.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -216,6 +220,18 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
               {view !== "recommended" && (
                 <Button size="sm" variant="ghost" disabled={busy} onClick={() => act("undo")}>Move back to Recommended</Button>
               )}
+              {canResearch ? (
+                <Button size="sm" variant="outline" className="border-pine-300 text-pine" onClick={() => { setResearchMounted(true); setResearchOpen(true); }}>
+                  <FileSearch /> Research this grant
+                </Button>
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span tabIndex={0} className="rounded-md"><Button size="sm" variant="outline" disabled><FileSearch /> Research this grant</Button></span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">Reads the notice PDFs with AI. Needs Azure OpenAI chat to be set up on the server.</TooltipContent>
+                </Tooltip>
+              )}
               <CollapsibleTrigger asChild>
                 <Button size="sm" variant="link" className="px-0 sm:ml-auto">
                   {expanded ? "Hide details" : "Details & how it was scored"}
@@ -298,6 +314,7 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
           </Collapsible>
       </div>
     </Card>
+    {researchMounted && <ResearchDialog open={researchOpen} onOpenChange={setResearchOpen} result={r} agency={agency} />}
     </div>
   );
 }

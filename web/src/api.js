@@ -32,7 +32,15 @@ export const api = {
   deleteDocument: (agency, id) => request("DELETE", `/api/agencies/${agency}/documents/${id}`),
   subscribe: (body) => request("POST", "/api/subscriptions", body),
   previewEmail: (body) => request("POST", "/api/subscriptions/preview", body),
+  startResearch: (body) => request("POST", "/api/research", body),
+  researchJob: (id) => request("GET", `/api/research/jobs/${id}`),
+  savedResearch: (opp, agency) => request("GET", `/api/research?opportunity_id=${encodeURIComponent(opp)}&agency_id=${encodeURIComponent(agency)}`),
 };
+
+/** A notice attachment served through our server, so it can be shown in the page. */
+export function documentUrl(opportunityId, docId, page) {
+  return `/api/opportunities/${encodeURIComponent(opportunityId)}/documents/${docId}${page ? `#page=${page}` : ""}`;
+}
 
 export function money(n) {
   if (!n) return "Amount not listed";
