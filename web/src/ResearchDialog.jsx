@@ -48,6 +48,7 @@ export default function ResearchDialog({
   onOpenChange,
   result: r,
   agency,
+  onDone,
 }) {
   const o = r.opportunity;
   const [state, setState] = useState({ status: "loading" }); // loading | running | done | error
@@ -98,6 +99,12 @@ export default function ResearchDialog({
     },
     [o.id, agency.id, follow],
   );
+
+  // Tell the card the grant now has saved research, so its button switches to "View research".
+  useEffect(() => {
+    if (state.status === "done")
+      onDone?.(state.data?.created_at || new Date().toISOString());
+  }, [state.status, state.data]);
 
   // Closing stops polling; the run keeps going on the server and is picked up again on reopen.
   useEffect(() => {
@@ -172,7 +179,7 @@ export default function ResearchDialog({
           <TabsContent value="plan" className="min-h-0 overflow-y-auto">
             {state.status === "loading" && (
               <Centered>
-                <Loader2 className="size-5 animate-spin motion-reduce:animate-none" />
+                <Loader2 className="size-5 animate-spin motion-reduce:[animation-duration:2s]" />
               </Centered>
             )}
             {state.status === "running" && (
@@ -333,7 +340,7 @@ function Running({ phase, started }) {
       <div className="max-w-md" role="status" aria-live="polite">
         <p className="display-light text-4xl text-pine">Reading the notice</p>
         <p className="mt-4 flex items-center gap-2 font-extrabold text-pine">
-          <Loader2 className="size-4 shrink-0 animate-spin motion-reduce:animate-none" />{" "}
+          <Loader2 className="size-4 shrink-0 animate-spin motion-reduce:[animation-duration:2s]" />{" "}
           {phase}
         </p>
         <p className="mt-1 font-mono text-[12px] text-muted-foreground tabular-nums">

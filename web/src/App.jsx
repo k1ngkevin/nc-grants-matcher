@@ -182,7 +182,7 @@ export default function App() {
     return (
       <Backdrop>
         <p className="flex items-center gap-2 text-sm text-fog/80">
-          <Loader2 className="size-4 animate-spin motion-reduce:animate-none" /> Loading open grants
+          <Loader2 className="size-4 animate-spin motion-reduce:[animation-duration:2s]" /> Loading open grants
         </p>
       </Backdrop>
     );

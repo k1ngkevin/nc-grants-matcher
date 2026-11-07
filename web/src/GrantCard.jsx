@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ExternalLink, FileSearch, Flag } from "lucide-react";
+import { ChevronDown, ExternalLink, FileCheck2, FileSearch, Flag } from "lucide-react";
 import { fmtDate, money, store } from "./api.js";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -111,6 +111,10 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
   const [researchMounted, setResearchMounted] = useState(false); // keep results after the first open
   const ref = useRef(null);
   const canResearch = meta.ai?.research;
+  // When this agency last saved research on the grant. Set from search results, and as soon as a run finishes.
+  const [researchAt, setResearchAt] = useState(r.research_at || null);
+  useEffect(() => { if (r.research_at) setResearchAt(r.research_at); }, [r.research_at]);
+  const openResearch = () => { setResearchMounted(true); setResearchOpen(true); };
 
   useEffect(() => {
     if (startExpanded && ref.current) ref.current.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -159,6 +163,7 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
             <span>{o.federal_agency}</span>
             {o.number && <span className="font-mono text-[12px] tabular-nums">{o.number}</span>}
             {o.is_sample ? <Badge className="bg-blaze-tint text-[11px] text-blaze-deep">Sample</Badge> : null}
+            {researchAt && <Badge className="gap-1 bg-pine-100 text-[11px] text-pine"><FileCheck2 className="size-3" /> Researched</Badge>}
           </div>
           <h3 className="mt-1 mb-3 text-[19px] leading-snug font-extrabold tracking-[-0.01em]">
             <a href={o.url} target="_blank" rel="noopener noreferrer" className="text-pine decoration-blaze decoration-2 underline-offset-4 hover:underline">{o.title}</a>
@@ -220,8 +225,14 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
               {view !== "recommended" && (
                 <Button size="sm" variant="ghost" disabled={busy} onClick={() => act("undo")}>Move back to Recommended</Button>
               )}
-              {canResearch ? (
-                <Button size="sm" variant="outline" className="border-pine-300 text-pine" onClick={() => { setResearchMounted(true); setResearchOpen(true); }}>
+              {researchAt ? (
+                // Saved research opens without a new AI run, so it works even when AI isn't configured.
+                <Button size="sm" className="font-extrabold" onClick={openResearch}>
+                  <FileCheck2 /> View research
+                  <span className="font-extralight text-pine-100">{fmtDate(researchAt.slice(0, 10))}</span>
+                </Button>
+              ) : canResearch ? (
+                <Button size="sm" variant="outline" className="border-pine-300 text-pine" onClick={openResearch}>
                   <FileSearch /> Research this grant
                 </Button>
               ) : (
@@ -329,7 +340,7 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
           </Collapsible>
       </div>
     </Card>
-    {researchMounted && <ResearchDialog open={researchOpen} onOpenChange={setResearchOpen} result={r} agency={agency} />}
+    {researchMounted && <ResearchDialog open={researchOpen} onOpenChange={setResearchOpen} result={r} agency={agency} onDone={setResearchAt} />}
     </div>
   );
 }

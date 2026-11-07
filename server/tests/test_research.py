@@ -140,3 +140,20 @@ def test_cached_question_objects_are_repaired_without_another_ai_call(fake, clie
     restarted = client.post("/api/research", json={"opportunity_id": opp_id, "agency_id": "osfm"}).json()
     assert restarted["status"] == "done" and restarted["result"]["questions"] == [question, question]
     assert fake == []
+
+
+def test_search_marks_grants_the_agency_already_researched(client):
+    from app.search import Filters, search
+    first = search(Filters(agency_id="dit"), limit=3)["results"]
+    assert first and all(r["research_at"] is None for r in first)
+    opp_id = first[0]["opportunity"]["id"]
+    with db.session() as conn:
+        conn.execute("INSERT INTO research(opportunity_id, agency_id, result, created_at) VALUES (?, ?, ?, ?) "
+                     "ON CONFLICT(opportunity_id, agency_id) DO UPDATE SET result=excluded.result, created_at=excluded.created_at",
+                     (opp_id, "dit", json.dumps(AI_ANSWER), "2026-11-07T12:00:00+00:00"))
+    by_id = {r["opportunity"]["id"]: r["research_at"] for r in search(Filters(agency_id="dit"), limit=3)["results"]}
+    assert by_id[opp_id] == "2026-11-07T12:00:00+00:00"
+    assert all(v is None for k, v in by_id.items() if k != opp_id)
+    # Research is per agency: another agency's results don't show it.
+    other = search(Filters(agency_id="osfm"), limit=50)["results"]
+    assert all(r["research_at"] is None for r in other if r["opportunity"]["id"] == opp_id)

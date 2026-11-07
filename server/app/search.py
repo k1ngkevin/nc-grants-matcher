@@ -72,6 +72,8 @@ def search(f: Filters, limit: int = 50, offset: int = 0, with_llm: bool = False)
 
     with db.session() as conn:
         rows = [db.row_to_dict(r) for r in conn.execute("SELECT * FROM opportunities")]
+        researched = {r["opportunity_id"]: r["created_at"] for r in conn.execute(
+            "SELECT opportunity_id, created_at FROM research WHERE agency_id=?", (f.agency_id,))}
 
     # Guardrails (strict, agency-specific eligibility) then user filters.
     candidates = []
@@ -127,6 +129,7 @@ def search(f: Filters, limit: int = 50, offset: int = 0, with_llm: bool = False)
         r["rationale_source"] = "ai" if ai_text else "rules"
         r["grant_type"] = grant_type(o.get("funding_instruments"), o.get("competition"), o.get("cost_sharing"))
         r["timing_label"] = TIMING_LABELS.get(r["signals"]["timing"], "")
+        r["research_at"] = researched.get(o["id"])  # when this agency last saved in-depth research, else None
         o.pop("embedding", None)
 
     return {

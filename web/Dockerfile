@@ -7,6 +7,8 @@ COPY . ./
 RUN npm run build
 
 FROM nginx:1.27-alpine
-COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+# nginx fills ${API_UPSTREAM} into the template at startup (only variables that are set; $host etc. are left alone).
+ENV API_UPSTREAM=api:8000
+COPY nginx/templates/ /etc/nginx/templates/
 COPY --from=build /web/dist /usr/share/nginx/html
 EXPOSE 80
