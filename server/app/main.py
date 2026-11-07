@@ -8,6 +8,7 @@ import threading
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
+from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
@@ -17,7 +18,7 @@ from pydantic import BaseModel, Field
 from . import config, db, emailer, evaluate
 from .agencies import AGENCIES, AGENCY_BY_ID
 from .ingest import pipeline
-from .matching import embeddings
+from .matching import embeddings, explain
 from .matching.score import DISMISS_REASONS, WEIGHTS
 from .normalize import CATEGORY_LABELS, INSTRUMENT_LABELS, TIMING_LABELS
 from .search import Filters, search
@@ -39,11 +40,29 @@ def _scheduled_ingest():
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db.init_db()
+    if config.EMAIL_ENABLED:
+        log.info("Email: sending through %s as %s", emailer.describe_backend(), config.SMTP_FROM)
+        for problem in emailer.config_problems():
+            log.warning("Email setup: %s", problem)
+    else:
+        log.info("Email: not configured (no ACS_CONNECTION_STRING or SMTP_HOST), so emails are saved to %s", config.OUTBOX_DIR)
     with db.session() as conn:
         empty = conn.execute("SELECT COUNT(*) FROM opportunities").fetchone()[0] == 0
     if empty and SEED_SAMPLE_IF_EMPTY:
         log.info("Database empty: loading the labeled SAMPLE dataset. Run `python -m app.ingest` for live data.")
         pipeline.run(sample=True)
+    if config.USE_AZURE_EMBEDDINGS:
+        s = embeddings.vector_status()
+        if s["with_vector"] < s["total"]:
+            log.warning("AI matching: Azure deployment '%s' is configured, but only %s of %s opportunities have a vector, "
+                        "so matching uses local text similarity. Run `python -m app.ingest --embed`.",
+                        config.AZURE_EMBEDDING_DEPLOYMENT, s["with_vector"], s["total"])
+        else:
+            log.info("AI matching: Azure OpenAI embeddings (deployment '%s')", config.AZURE_EMBEDDING_DEPLOYMENT)
+    else:
+        log.info("AI matching: local text similarity (Azure embeddings not configured)")
+    log.info("Explanations: %s", f"Azure OpenAI deployment '{config.AZURE_CHAT_DEPLOYMENT}' for the top 10, rule-based otherwise"
+             if config.USE_AZURE_CHAT else "rule-based (Azure chat not configured)")
     scheduler = None
     if config.RUN_SCHEDULER:
         from apscheduler.schedulers.background import BackgroundScheduler
@@ -160,7 +179,7 @@ def meta():
         "email_enabled": config.EMAIL_ENABLED,
         "email_confirmation": config.REQUIRE_EMAIL_CONFIRMATION,
         "allowed_email_domains": config.ALLOWED_EMAIL_DOMAINS,
-        "ai": {"embeddings": embeddings.backend(), "explanations": "azure-openai" if config.USE_AZURE_CHAT else "rules"},
+        "ai": {"embeddings": embeddings.active_backend(), "explanations": "azure-openai" if explain.available() else "rules"},
         "dismiss_reasons": DISMISS_REASONS,
         "weights": WEIGHTS,
         "glossary": {
@@ -277,30 +296,60 @@ def subscribe(body: SubscribeBody, request: Request):
     if err:
         raise HTTPException(400, err)
     try:
-        return emailer.create_subscription(body.email, body.agency_id, body.filters, body.frequency, body.top_n)
+        result = emailer.create_subscription(body.email, body.agency_id, body.filters, body.frequency, body.top_n)
     except ValueError as e:
         raise HTTPException(400, str(e))
+    if not result["confirmed"] and result["delivery"].get("error"):
+        raise HTTPException(503, "We couldn't send the confirmation email right now. Please try again in a few minutes.")
+    return result
 
 
-def _page(title: str, message: str) -> HTMLResponse:
+def _page(title: str, message: str, button: str = "", action: str = "") -> HTMLResponse:
+    form = (f"""<form method="post" action="{html.escape(action)}"><button type="submit" style="background:#123b68;color:#fff;border:0;
+padding:10px 18px;border-radius:6px;font-size:15px;cursor:pointer">{html.escape(button)}</button></form>""" if button else "")
     return HTMLResponse(f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{html.escape(title)}</title></head><body style="font-family:Segoe UI,Arial,sans-serif;background:#f4f6f9;margin:0">
 <div style="max-width:520px;margin:12vh auto;background:#fff;padding:28px;border-radius:10px">
-<h2 style="color:#123b68;margin-top:0">{html.escape(title)}</h2><p>{message}</p><p><a href="/" style="color:#123b68">Back to the Matchmaker</a></p></div></body></html>""")
+<h2 style="color:#123b68;margin-top:0">{html.escape(title)}</h2><p>{message}</p>{form}<p><a href="/" style="color:#123b68">Back to the Matchmaker</a></p></div></body></html>""")
 
 
+# Links in emails only show a page with a button. The change happens on POST, so mail
+# security scanners that open every link can't confirm or unsubscribe anyone by themselves.
 @app.get("/api/subscriptions/confirm", response_class=HTMLResponse)
+def confirm_page(token: str):
+    sub = emailer.find_subscription(token)
+    if not sub:
+        return _page("Link not valid", "This link isn't valid anymore. It may have been used to unsubscribe.")
+    a = html.escape(AGENCY_BY_ID[sub["agency_id"]]["name"])
+    if sub["confirmed"]:
+        return _page("You're already subscribed", f"You get the top grants for <b>{a}</b> {sub['frequency']}.")
+    return _page("Confirm your grant alerts", f"Start getting the top grants for <b>{a}</b> {sub['frequency']}?",
+                 "Confirm my subscription", f"/api/subscriptions/confirm?token={quote(token, safe='')}")
+
+
+@app.post("/api/subscriptions/confirm", response_class=HTMLResponse)
 def confirm(token: str):
     sub = emailer.confirm(token)
     if not sub:
-        return _page("Link not valid", "This confirmation link has expired or was already used to unsubscribe.")
+        return _page("Link not valid", "This link isn't valid anymore. It may have been used to unsubscribe.")
     a = AGENCY_BY_ID[sub["agency_id"]]
     return _page("You're subscribed", f"You'll get the top grants for <b>{html.escape(a['name'])}</b> {sub['frequency']}. "
-                 "The first email is on its way now. Every email has a one-click unsubscribe link.")
+                 "The first email is on its way. Every email has an unsubscribe link.")
 
 
 @app.get("/api/subscriptions/unsubscribe", response_class=HTMLResponse)
+def unsubscribe_page(token: str):
+    sub = emailer.find_subscription(token)
+    if not sub:
+        return _page("Already unsubscribed", "This address isn't getting alerts from this link.")
+    a = html.escape(AGENCY_BY_ID[sub["agency_id"]]["name"])
+    return _page("Unsubscribe?", f"Stop the {sub['frequency']} grant alerts for <b>{a}</b> to {html.escape(sub['email'])}?",
+                 "Unsubscribe", f"/api/subscriptions/unsubscribe?token={quote(token, safe='')}")
+
+
+@app.post("/api/subscriptions/unsubscribe", response_class=HTMLResponse)
 def unsubscribe(token: str):
+    """Used by the page's button and by mail apps' one-click unsubscribe (List-Unsubscribe-Post)."""
     emailer.unsubscribe(token)
     return _page("You're unsubscribed", "You won't get any more grant alerts at this address.")
 

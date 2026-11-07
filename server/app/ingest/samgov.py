@@ -32,14 +32,24 @@ def _find_records(payload):
     return []
 
 
+class RateLimited(Exception):
+    """SAM.gov returned 429: the key's request quota is used up, so further calls will fail too."""
+
+
 def lookup(aln: str) -> dict | None:
+    """Raises RateLimited on HTTP 429; any other failure is logged and returns None."""
     if not SAM_API_KEY:
         return None
     try:
         r = requests.get(URL, params={"api_key": SAM_API_KEY, "assistanceListingNumber": aln, "limit": 1}, timeout=30)
+        if r.status_code == 429:
+            raise RateLimited(r.headers.get("Retry-After") or "")
         r.raise_for_status()
+    except RateLimited:
+        raise
     except Exception as e:
-        log.warning("SAM.gov lookup %s failed: %s", aln, e)
+        # requests puts the full URL (including api_key) in its error text; never log the key.
+        log.warning("SAM.gov lookup %s failed: %s", aln, str(e).replace(SAM_API_KEY, "<SAM_API_KEY>"))
         return None
     records = _find_records(r.json())
     if not records:
@@ -54,11 +64,16 @@ def enrich(opps: list[dict], limit: int = 400) -> int:
     if not SAM_API_KEY:
         log.info("SAM.gov: skipped (no SAM_API_KEY)")
         return 0
+    wanted = list(dict.fromkeys(a for opp in opps for a in opp.get("aln_numbers", [])[:2]))[:limit]
     cache: dict[str, dict | None] = {}
-    for opp in opps:
-        for aln in opp.get("aln_numbers", [])[:2]:
-            if aln not in cache and len(cache) < limit:
-                cache[aln] = lookup(aln)
+    for aln in wanted:
+        try:
+            cache[aln] = lookup(aln)
+        except RateLimited as e:
+            retry = f" (Retry-After: {e})" if str(e) else ""
+            log.warning("SAM.gov: rate limit reached (HTTP 429)%s after %s of %s lookups; "
+                        "skipping the rest for this run.", retry, len(cache), len(wanted))
+            break
     n = 0
     for opp in opps:
         extra = " ".join(c["text"] for a in opp.get("aln_numbers", [])[:2] if (c := cache.get(a)) and c.get("text"))

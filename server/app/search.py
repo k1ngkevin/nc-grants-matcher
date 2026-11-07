@@ -116,8 +116,9 @@ def search(f: Filters, limit: int = 50, offset: int = 0, with_llm: bool = False)
     page = out[offset:offset + limit]
     for i, r in enumerate(page):
         o = r["opportunity"]
-        r["rationale"] = (with_llm and i < 10 and explain.llm_rationale(agency, r, projects)) or explain.template_rationale(agency, r)
-        r["rationale_source"] = "ai" if with_llm and i < 10 and explain.config.USE_AZURE_CHAT else "rules"
+        ai_text = explain.llm_rationale(agency, r, projects) if with_llm and i < 10 else None
+        r["rationale"] = ai_text or explain.template_rationale(agency, r)
+        r["rationale_source"] = "ai" if ai_text else "rules"
         r["grant_type"] = grant_type(o.get("funding_instruments"), o.get("competition"), o.get("cost_sharing"))
         r["timing_label"] = TIMING_LABELS.get(r["signals"]["timing"], "")
         r["match_level"] = "strong" if r["score"] >= 70 else "good" if r["score"] >= 50 else "possible"

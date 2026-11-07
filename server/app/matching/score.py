@@ -99,22 +99,29 @@ def rank(agency: dict, opps: list[dict], profile_chunks: list[str], projects: li
          decisions: list[dict]) -> list[dict]:
     if not opps:
         return []
-    index = embeddings.get_index()
-    cols = [index.pos[o["id"]] for o in opps if o["id"] in index.pos]
-    opps = [o for o in opps if o["id"] in index.pos]
 
-    prof = index.similarities(profile_chunks)[:, cols].max(axis=0) if profile_chunks else [0.0] * len(opps)
-    proj_sims = index.similarities([p["title"] + ". " + p["description"] for p in projects])[:, cols] if projects else None
+    def similarities(index):
+        cols = [index.pos[o["id"]] for o in opps if o["id"] in index.pos]
+        prof = index.similarities(profile_chunks)[:, cols].max(axis=0) if profile_chunks else [0.0] * len(cols)
+        proj = index.similarities([p["title"] + ". " + p["description"] for p in projects])[:, cols] if projects else None
+        return [o for o in opps if o["id"] in index.pos], prof, proj
+
+    index = embeddings.get_index()
+    try:
+        opps, prof, proj_sims = similarities(index)
+    except embeddings.EmbeddingError:
+        index = embeddings.get_index()  # Azure is cooling down now, so this is the local TF-IDF index
+        opps, prof, proj_sims = similarities(index)
     fb = feedback_model(decisions)
 
     results = []
     for j, o in enumerate(opps):
         text = f"{o['title']} {o.get('description') or ''}"
-        mission = embeddings.calibrate(float(prof[j]))
+        mission = embeddings.calibrate(float(prof[j]), index.kind)
         best_proj, proj_fit = None, 0.0
         if proj_sims is not None and proj_sims.shape[0]:
             k = int(proj_sims[:, j].argmax())
-            proj_fit = embeddings.calibrate(float(proj_sims[k, j]))
+            proj_fit = embeddings.calibrate(float(proj_sims[k, j]), index.kind)
             if proj_fit >= 0.35:
                 best_proj = projects[k]
         semantic = mission if proj_fit <= mission else (mission + proj_fit) / 2

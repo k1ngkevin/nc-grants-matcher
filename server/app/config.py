@@ -3,7 +3,15 @@ same container runs on a laptop (no keys) or in Azure (keys set)."""
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 ROOT = Path(__file__).resolve().parent.parent
+# Read .env from the repo root if it exists. Real environment variables always win, so
+# Docker's --env-file and Azure settings behave as before. ENV_FILE="" turns this off (tests).
+ENV_FILE = os.getenv("ENV_FILE", str(ROOT.parent / ".env"))
+if ENV_FILE:
+    load_dotenv(ENV_FILE, override=False)
+
 DATA_DIR = Path(os.getenv("DATA_DIR", ROOT / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = Path(os.getenv("DB_PATH", DATA_DIR / "matchmaker.db"))
@@ -41,7 +49,10 @@ SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_FROM = os.getenv("SMTP_FROM", "NC Federal Funds Matchmaker <no-reply@example.gov>")
 SMTP_STARTTLS = os.getenv("SMTP_STARTTLS", "true").lower() == "true"
-EMAIL_ENABLED = bool(SMTP_HOST)
+# Or send through Azure Communication Services' email API with the resource's connection string
+# (Keys page), which needs no SMTP username. Takes priority over SMTP_HOST. SMTP_FROM is the sender.
+ACS_CONNECTION_STRING = os.getenv("ACS_CONNECTION_STRING", "").strip()
+EMAIL_ENABLED = bool(SMTP_HOST or ACS_CONNECTION_STRING)
 # Comma-separated list, e.g. "nc.gov,unc.edu". Empty = allow any domain.
 ALLOWED_EMAIL_DOMAINS = [d.strip().lower() for d in os.getenv("ALLOWED_EMAIL_DOMAINS", "").split(",") if d.strip()]
 # Double opt-in: a subscription only becomes active after the link in the confirmation email is clicked.

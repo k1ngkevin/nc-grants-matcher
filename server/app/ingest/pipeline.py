@@ -76,15 +76,22 @@ def run(sample: bool = False, max_records: int | None = None, skip_usaspending: 
     if source != "sample":  # live data replaces the demo set (keeping anything a reviewer acted on)
         with db.session() as conn:
             conn.execute("DELETE FROM opportunities WHERE source='sample' AND id NOT IN (SELECT opportunity_id FROM decisions)")
-    embeddings.refresh_opportunity_embeddings()
     summary = {
         "source": source,
         "fetched": len(opps),
         "kept": len(kept),
         "dropped": dict(dropped),
-        "ran_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "as_of": date.today().isoformat(),
     }
+    # The data is already stored, so an embedding problem must not stop the ingest from finishing
+    # (and bumping ingest_version below); matching uses local TF-IDF until the vectors exist.
+    try:
+        embeddings.refresh_opportunity_embeddings()
+    except embeddings.EmbeddingError as e:
+        log.error("Opportunities were saved but not embedded, so matching uses local text similarity. "
+                  "Fix the Azure setting, then run `python -m app.ingest --embed`. %s", e)
+        summary["embedding_error"] = str(e)
+    summary["ran_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    summary["as_of"] = date.today().isoformat()
     db.set_meta("last_ingest", summary)
     db.set_meta("ingest_version", summary["ran_at"])
     log.info("Ingest summary: %s", summary)
