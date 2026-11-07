@@ -1,13 +1,40 @@
 import { useEffect, useState } from "react";
+import { CheckCircle2, ChevronDown, Mail, Search, Upload, X } from "lucide-react";
 import { api, store } from "./api.js";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 const TIMING = [
-  ["urgent", "Closes within 14 days"],
-  ["standard", "Closes in 15–60 days"],
-  ["later", "Closes in 60+ days"],
-  ["forecasted", "Forecast (coming soon)"],
+  ["urgent", "Closes within 14 days", "bg-urgent"],
+  ["standard", "Closes in 15–60 days", "bg-soon"],
+  ["later", "Closes in 60+ days", "bg-haze"],
+  ["forecasted", "Forecast (coming soon)", "bg-forecast"],
 ];
 const AWARD_OPTIONS = [50_000, 100_000, 250_000, 1_000_000, 5_000_000];
+const ALL_DEPTS = "__all";
+
+function FieldLabel({ htmlFor, children, className }) {
+  return <Label htmlFor={htmlFor} className={cn("mb-1.5 text-[13px] text-muted-foreground", className)}>{children}</Label>;
+}
+
+function CheckRow({ id, checked, onChange, children, count }) {
+  return (
+    <div className="flex items-center gap-2.5 py-1">
+      <Checkbox id={id} checked={checked} onCheckedChange={(v) => onChange(v === true)} />
+      <Label htmlFor={id} className="flex-1 cursor-pointer gap-2 text-sm font-normal">{children}</Label>
+      {count != null && <span className="text-[13px] text-muted-foreground tabular-nums">{count}</span>}
+    </div>
+  );
+}
 
 export function Filters({ meta, filters, facets, onChange, onReset, defaultMinScore }) {
   const set = (patch) => onChange({ ...filters, ...patch });
@@ -18,61 +45,68 @@ export function Filters({ meta, filters, facets, onChange, onReset, defaultMinSc
   const depts = Object.entries(facets?.federal_agency || {});
 
   return (
-    <div className="card">
-      <div className="card-head">
-        <h2>Filters</h2>
-        <button className="link-btn" onClick={onReset}>Reset</button>
-      </div>
+    <Card className="gap-4 py-4">
+      <CardHeader className="px-4">
+        <CardTitle>Filters</CardTitle>
+        <CardAction>
+          <Button variant="link" size="sm" className="h-auto p-0" onClick={onReset}>Reset</Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4 px-4">
+        <div>
+          <FieldLabel htmlFor="kw">Search</FieldLabel>
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input id="kw" type="search" className="pl-8" placeholder="broadband, flood, literacy" value={filters.q} onChange={(e) => set({ q: e.target.value })} />
+          </div>
+        </div>
 
-      <label className="field-label" htmlFor="kw">Search</label>
-      <input id="kw" type="search" placeholder="e.g. broadband, flood, literacy" value={filters.q} onChange={(e) => set({ q: e.target.value })} />
+        <div>
+          <FieldLabel htmlFor="min-award">Minimum award</FieldLabel>
+          <Select value={String(filters.min_award)} onValueChange={(v) => set({ min_award: Number(v) })}>
+            <SelectTrigger id="min-award" className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {AWARD_OPTIONS.filter((v) => v >= meta.financial_floor).map((v) => (
+                <SelectItem key={v} value={String(v)}>{v >= 1_000_000 ? `$${v / 1_000_000}M` : `$${v / 1000}K`} or more</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-      <label className="field-label" htmlFor="min-award">Minimum award</label>
-      <select id="min-award" value={filters.min_award} onChange={(e) => set({ min_award: Number(e.target.value) })}>
-        {AWARD_OPTIONS.filter((v) => v >= meta.financial_floor).map((v) => (
-          <option key={v} value={v}>{v >= 1_000_000 ? `$${v / 1_000_000}M` : `$${v / 1000}K`} or more</option>
-        ))}
-      </select>
+        <fieldset>
+          <legend className="mb-1 text-[13px] font-medium text-muted-foreground">Deadline</legend>
+          {TIMING.map(([key, label, dot]) => (
+            <CheckRow key={key} id={`timing-${key}`} checked={filters.timing.includes(key)} onChange={() => toggleTiming(key)} count={facets?.timing?.[key] ?? ""}>
+              <span className={cn("size-2 shrink-0 rounded-full", dot)} aria-hidden="true" />
+              {label}
+            </CheckRow>
+          ))}
+        </fieldset>
 
-      <fieldset>
-        <legend className="field-label">Deadline</legend>
-        {TIMING.map(([key, label]) => (
-          <label key={key} className="check">
-            <input type="checkbox" checked={filters.timing.includes(key)} onChange={() => toggleTiming(key)} />
-            <span className={`dot timing-${key}`} />
-            {label}
-            <span className="count">{facets?.timing?.[key] ?? ""}</span>
-          </label>
-        ))}
-      </fieldset>
+        <div>
+          <FieldLabel htmlFor="fed">Federal department</FieldLabel>
+          <Select value={filters.federal_agency || ALL_DEPTS} onValueChange={(v) => set({ federal_agency: v === ALL_DEPTS ? "" : v })}>
+            <SelectTrigger id="fed" className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent position="popper" className="max-h-80">
+              <SelectItem value={ALL_DEPTS}>All departments</SelectItem>
+              {filters.federal_agency && !depts.some(([d]) => d === filters.federal_agency) && (
+                <SelectItem value={filters.federal_agency}>{filters.federal_agency}</SelectItem>
+              )}
+              {depts.map(([d, n]) => (
+                <SelectItem key={d} value={d}>{d} ({n})</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-      <label className="field-label" htmlFor="fed">Federal department</label>
-      <select id="fed" value={filters.federal_agency} onChange={(e) => set({ federal_agency: e.target.value })}>
-        <option value="">All departments</option>
-        {filters.federal_agency && !depts.some(([d]) => d === filters.federal_agency) && (
-          <option value={filters.federal_agency}>{filters.federal_agency}</option>
-        )}
-        {depts.map(([d, n]) => (
-          <option key={d} value={d}>{d} ({n})</option>
-        ))}
-      </select>
-
-      <fieldset>
-        <legend className="field-label">More options</legend>
-        <label className="check">
-          <input type="checkbox" checked={filters.no_match_only} onChange={(e) => set({ no_match_only: e.target.checked })} />
-          No matching funds required
-        </label>
-        <label className="check">
-          <input type="checkbox" checked={filters.include_unknown_amount} onChange={(e) => set({ include_unknown_amount: e.target.checked })} />
-          Include grants with no amount listed
-        </label>
-        <label className="check">
-          <input type="checkbox" checked={filters.min_score === 0} onChange={(e) => set({ min_score: e.target.checked ? 0 : defaultMinScore })} />
-          Show weaker matches too
-        </label>
-      </fieldset>
-    </div>
+        <fieldset>
+          <legend className="mb-1 text-[13px] font-medium text-muted-foreground">More options</legend>
+          <CheckRow id="opt-nomatch" checked={filters.no_match_only} onChange={(v) => set({ no_match_only: v })}>No matching funds required</CheckRow>
+          <CheckRow id="opt-unknown" checked={filters.include_unknown_amount} onChange={(v) => set({ include_unknown_amount: v })}>Include grants with no amount listed</CheckRow>
+          <CheckRow id="opt-weak" checked={filters.min_score === 0} onChange={(v) => set({ min_score: v ? 0 : defaultMinScore })}>Show weaker matches too</CheckRow>
+        </fieldset>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -112,52 +146,75 @@ export function EmailSignup({ meta, agency, filters }) {
   if (state.status === "done") {
     const r = state.res;
     return (
-      <div className="card email-card done">
-        <h2>✓ You're set</h2>
-        {r.confirmed ? (
-          <p>We'll email the top {topN} grants for {agency.short} to <b>{r.email}</b> {frequency}. The first one was just sent.</p>
-        ) : (
-          <p>Check <b>{r.email}</b> for a confirmation link. Alerts start once you confirm.</p>
-        )}
-        {!r.email_enabled && (
-          <p className="hint">
-            Demo server: email isn't configured, so messages are saved to the server's outbox folder.
-            {r.dev_confirm_url && (<> <a href={r.dev_confirm_url} target="_blank" rel="noopener noreferrer">Confirm now (demo)</a></>)}
-          </p>
-        )}
-        <button className="link-btn" onClick={() => setState({ status: "idle" })}>Add another</button>
-      </div>
+      <Card className="gap-3 border-t-4 border-t-soon py-4">
+        <CardHeader className="px-4">
+          <CardTitle className="flex items-center gap-2 text-soon"><CheckCircle2 className="size-5" /> Subscribed</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2 px-4 text-sm">
+          {r.confirmed ? (
+            <p>
+              We'll email the top {topN} grants for {agency.short} to <b>{r.email}</b> {frequency}.{" "}
+              {r.delivery?.error ? "The first email didn't go out, so we'll try again within the hour." : "The first one was just sent."}
+            </p>
+          ) : (
+            <p>Check <b>{r.email}</b> for a confirmation link. Alerts start once you confirm.</p>
+          )}
+          {!r.email_enabled && (
+            <p className="text-[13px] text-muted-foreground">
+              Demo server: email isn't configured, so messages are saved to the server's outbox folder.
+              {r.dev_confirm_url && (<> <a className="text-primary underline" href={r.dev_confirm_url} target="_blank" rel="noopener noreferrer">Confirm now (demo)</a></>)}
+            </p>
+          )}
+          <Button variant="link" size="sm" className="h-auto self-start p-0" onClick={() => setState({ status: "idle" })}>Add another</Button>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <form className="card email-card" onSubmit={submit}>
-      <h2>📬 Email me the top grants</h2>
-      <p className="hint">Get the best matches for {agency.short} with the filters you've set. Unsubscribe anytime.</p>
-      <label className="field-label" htmlFor="sub-email">Work email</label>
-      <input id="sub-email" type="email" required placeholder="you@agency.nc.gov" value={email} onChange={(e) => setEmail(e.target.value)} />
-      <div className="two-col">
-        <div>
-          <label className="field-label" htmlFor="sub-freq">How often</label>
-          <select id="sub-freq" value={frequency} onChange={(e) => setFrequency(e.target.value)}>
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="biweekly">Every 2 weeks</option>
-            <option value="monthly">Monthly</option>
-          </select>
-        </div>
-        <div>
-          <label className="field-label" htmlFor="sub-n">How many</label>
-          <select id="sub-n" value={topN} onChange={(e) => setTopN(Number(e.target.value))}>
-            {[5, 10, 15, 25].map((n) => <option key={n} value={n}>Top {n}</option>)}
-          </select>
-        </div>
-      </div>
-      {meta.allowed_email_domains.length > 0 && <p className="hint">Allowed: {meta.allowed_email_domains.join(", ")}</p>}
-      {state.status === "error" && <div className="error small">{state.error}</div>}
-      <button className="btn primary wide" disabled={state.status === "busy"}>{state.status === "busy" ? "Subscribing…" : "Subscribe"}</button>
-      <button type="button" className="link-btn center" onClick={preview}>Preview the email</button>
-    </form>
+    <Card className="gap-3 border-t-4 border-t-ridge py-4">
+      <CardHeader className="px-4">
+        <CardTitle className="flex items-center gap-2"><Mail className="size-4 text-ridge" /> Email me the top grants</CardTitle>
+        <CardDescription>The best matches for {agency.short} with the filters you've set. Unsubscribe anytime.</CardDescription>
+      </CardHeader>
+      <CardContent className="px-4">
+        <form className="flex flex-col gap-3" onSubmit={submit}>
+          <div>
+            <FieldLabel htmlFor="sub-email">Work email</FieldLabel>
+            <Input id="sub-email" type="email" required placeholder="you@agency.nc.gov" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <FieldLabel htmlFor="sub-freq">How often</FieldLabel>
+              <Select value={frequency} onValueChange={setFrequency}>
+                <SelectTrigger id="sub-freq" className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="daily">Daily</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="biweekly">Every 2 weeks</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <FieldLabel htmlFor="sub-n">How many</FieldLabel>
+              <Select value={String(topN)} onValueChange={(v) => setTopN(Number(v))}>
+                <SelectTrigger id="sub-n" className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {[5, 10, 15, 25].map((n) => <SelectItem key={n} value={String(n)}>Top {n}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {meta.allowed_email_domains.length > 0 && <p className="text-[13px] text-muted-foreground">Allowed: {meta.allowed_email_domains.join(", ")}</p>}
+          {state.status === "error" && (
+            <Alert variant="destructive" className="bg-urgent-bg py-2"><AlertDescription>{state.error}</AlertDescription></Alert>
+          )}
+          <Button className="w-full" disabled={state.status === "busy"}>{state.status === "busy" ? "Subscribing…" : "Subscribe"}</Button>
+          <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={preview}>Preview the email</Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -197,55 +254,70 @@ export function ImproveMatches({ agency, onChanged }) {
     reader.readAsText(file);
   };
 
-  return (
-    <div className="card">
-      <button className="card-head toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <h2>Improve your matches</h2>
-        <span className="muted">{projects.length} project{projects.length === 1 ? "" : "s"} · {docs.length} plan{docs.length === 1 ? "" : "s"} {open ? "▲" : "▼"}</span>
-      </button>
-      {!open && <p className="hint">Tell us what {agency.short} is working on and matches get sharper for everyone at your agency.</p>}
-      {open && (
-        <>
-          {error && <div className="error small">{error}</div>}
-          <h3 className="mini-h">Active projects</h3>
-          <ul className="item-list">
-            {projects.map((x) => (
-              <li key={x.id}>
-                <span title={x.description}>{x.title}</span>
-                <button className="link-btn danger" onClick={() => run(() => api.deleteProject(agency.id, x.id))} aria-label={`Remove ${x.title}`}>Remove</button>
-              </li>
-            ))}
-          </ul>
-          <form onSubmit={(e) => { e.preventDefault(); run(async () => { await api.addProject(agency.id, p); setP({ title: "", description: "" }); }); }}>
-            <input placeholder="Project name" value={p.title} onChange={(e) => setP({ ...p, title: e.target.value })} required minLength={3} maxLength={150} />
-            <textarea placeholder="What it does and what it needs, e.g. 'Replace lead service lines in 12 rural water systems; need $4M for construction.'" rows={3}
-              value={p.description} onChange={(e) => setP({ ...p, description: e.target.value })} required minLength={10} maxLength={4000} />
-            <button className="btn small">Add project</button>
-          </form>
+  const ItemList = ({ items, render, onRemove, label }) => items.length > 0 && (
+    <ul className="divide-y rounded-md border text-sm">
+      {items.map((x) => (
+        <li key={x.id} className="flex items-center justify-between gap-2 py-1.5 pr-1 pl-3">
+          <span className="min-w-0 truncate" title={x.description}>{render(x)}</span>
+          <Button variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-urgent" onClick={() => onRemove(x)} aria-label={`Remove ${label} ${x.title}`}>
+            <X />
+          </Button>
+        </li>
+      ))}
+    </ul>
+  );
 
-          <h3 className="mini-h">Strategic plan / mandates</h3>
-          <ul className="item-list">
-            {docs.map((x) => (
-              <li key={x.id}>
-                <span>{x.title} <span className="muted">({Math.round(x.characters / 1000)}K chars)</span></span>
-                <button className="link-btn danger" onClick={() => run(() => api.deleteDocument(agency.id, x.id))}>Remove</button>
-              </li>
-            ))}
-          </ul>
-          <form onSubmit={(e) => { e.preventDefault(); run(async () => { await api.addDocument(agency.id, d); setD({ title: "", content: "" }); }); }}>
-            <input placeholder="Title, e.g. 2025-2027 Strategic Plan" value={d.title} onChange={(e) => setD({ ...d, title: e.target.value })} required minLength={3} maxLength={200} />
-            <textarea placeholder="Paste goals, objectives or statutory mandates…" rows={3} value={d.content}
-              onChange={(e) => setD({ ...d, content: e.target.value })} required minLength={50} />
-            <div className="row-between">
-              <label className="link-btn file-label">
-                or upload .txt
-                <input type="file" accept=".txt,.md,.csv" onChange={(e) => readFile(e.target.files?.[0])} hidden />
-              </label>
-              <button className="btn small">Add plan</button>
-            </div>
-          </form>
-        </>
-      )}
-    </div>
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <Card className="gap-3 py-4">
+        <CollapsibleTrigger className="flex w-full items-start justify-between gap-2 px-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded-md">
+          <div>
+            <p className="leading-none font-semibold">Improve your matches</p>
+            <p className="mt-1.5 text-[13px] text-muted-foreground">
+              {projects.length} project{projects.length === 1 ? "" : "s"}, {docs.length} plan{docs.length === 1 ? "" : "s"} added
+            </p>
+          </div>
+          <ChevronDown className={cn("mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none", open && "rotate-180")} />
+        </CollapsibleTrigger>
+        {!open && <p className="px-4 text-[13px] text-muted-foreground">Tell us what {agency.short} is working on and matches get sharper for everyone at your agency.</p>}
+
+        <CollapsibleContent className="flex flex-col gap-4 px-4">
+          {error && <Alert variant="destructive" className="bg-urgent-bg py-2"><AlertDescription>{error}</AlertDescription></Alert>}
+
+          <section className="flex flex-col gap-2">
+            <h3 className="text-sm font-semibold text-ridge">Active projects</h3>
+            <ItemList items={projects} label="project" render={(x) => x.title} onRemove={(x) => run(() => api.deleteProject(agency.id, x.id))} />
+            <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); run(async () => { await api.addProject(agency.id, p); setP({ title: "", description: "" }); }); }}>
+              <Input placeholder="Project name" aria-label="Project name" value={p.title} onChange={(e) => setP({ ...p, title: e.target.value })} required minLength={3} maxLength={150} />
+              <Textarea placeholder="What it does and what it needs, e.g. 'Replace lead service lines in 12 rural water systems; need $4M for construction.'" rows={3}
+                aria-label="Project description" value={p.description} onChange={(e) => setP({ ...p, description: e.target.value })} required minLength={10} maxLength={4000} />
+              <Button size="sm" variant="secondary" className="self-end">Add project</Button>
+            </form>
+          </section>
+
+          <Separator />
+
+          <section className="flex flex-col gap-2">
+            <h3 className="text-sm font-semibold text-ridge">Strategic plan or mandates</h3>
+            <ItemList items={docs} label="plan" onRemove={(x) => run(() => api.deleteDocument(agency.id, x.id))}
+              render={(x) => <>{x.title} <span className="text-muted-foreground">({Math.round(x.characters / 1000)}K chars)</span></>} />
+            <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); run(async () => { await api.addDocument(agency.id, d); setD({ title: "", content: "" }); }); }}>
+              <Input placeholder="Title, e.g. 2025-2027 Strategic Plan" aria-label="Plan title" value={d.title} onChange={(e) => setD({ ...d, title: e.target.value })} required minLength={3} maxLength={200} />
+              <Textarea placeholder="Paste goals, objectives or statutory mandates" aria-label="Plan text" rows={3} value={d.content}
+                onChange={(e) => setD({ ...d, content: e.target.value })} required minLength={50} />
+              <div className="flex items-center justify-between">
+                <Button asChild variant="ghost" size="sm" className="-ml-2 cursor-pointer text-muted-foreground">
+                  <label>
+                    <Upload /> Upload .txt
+                    <input type="file" accept=".txt,.md,.csv" className="sr-only" onChange={(e) => readFile(e.target.files?.[0])} />
+                  </label>
+                </Button>
+                <Button size="sm" variant="secondary">Add plan</Button>
+              </div>
+            </form>
+          </section>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
   );
 }

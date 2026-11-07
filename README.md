@@ -42,7 +42,7 @@ That's a quick live check with the first 100 records. Drop `--max` to load every
 
 **Developing the UI:** run the API with `uvicorn app.main:app --reload --port 8000`, then `cd web && npm run dev` and open http://localhost:5173 (calls to `/api` are proxied).
 
-**Tests:** `cd server && python -m pytest -q` (27 tests: guardrails, ranking, triage, email, export).
+**Tests:** `cd server && python -m pytest -q` (33 tests: guardrails, ranking, triage, email, export).
 
 **Docker:** `docker build -t matchmaker .` then `docker run -p 8000:8000 --env-file .env -v matchmaker-data:/data matchmaker`
 
@@ -68,12 +68,13 @@ That's a quick live check with the first 100 records. Drop `--max` to load every
 
 | Set these | What changes |
 |---|---|
-| `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, `AZURE_EMBEDDING_DEPLOYMENT` | Similarity switches from local TF-IDF to Azure OpenAI embeddings. Opportunity vectors are computed once at ingest. Re-tune `CALIBRATION` in `matching/embeddings.py` for your embedding model |
+| `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, `AZURE_EMBEDDING_DEPLOYMENT` | Similarity switches from local TF-IDF to Azure OpenAI embeddings once every opportunity has a vector. Vectors are computed at ingest; for data loaded before you set these, run `cd server && python -m app.ingest --embed`. If Azure fails (wrong deployment name, bad key), matching falls back to TF-IDF and the server log says why. Re-tune `CALIBRATION` in `matching/embeddings.py` for your embedding model |
 | `AZURE_CHAT_DEPLOYMENT` | AI-written "Why it fits" for the top 10 results and in emails |
-| `SMTP_*` | Real email. Office 365, SendGrid and Azure Communication Services SMTP all work. Without it, emails go to `server/data/outbox/` |
+| `ACS_CONNECTION_STRING` | Real email through the Azure Communication Services email API, using the connection string from the resource's Keys page. No SMTP login or Entra app needed. Set `SMTP_FROM` to the email domain's MailFrom address. ACS Email is being retired September 30, 2028 |
+| `SMTP_*` | Real email through SendGrid, Azure Communication Services (being retired September 30, 2028) or any SMTP relay. Microsoft is retiring password sign-in for SMTP in Exchange Online, so check with IT before using an Office 365 mailbox. Without it, emails go to `server/data/outbox/`. Test the settings with `cd server && python -m app.emailer you@agency.nc.gov` |
 | `SAM_API_KEY` | SAM.gov program descriptions are added to the matching text |
 
-See `.env.example` for every setting. Load it with `set -a; source .env; set +a`, or use `--env-file` with Docker.
+See `.env.example` for every setting. Copy it to `.env` in the repo root and the server reads it on startup (real environment variables win). With Docker, use `--env-file`.
 
 **Deploy (Lane A):** push the image to Azure Container Registry, then run it on Azure Container Apps with one replica and an Azure Files volume mounted at `/data`. The daily ingest and email scheduler run inside the app. Put it behind Entra ID sign-in (Container Apps "Authentication") so only state staff can reach it.
 

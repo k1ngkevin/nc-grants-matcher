@@ -116,7 +116,7 @@ def search(f: Filters, limit: int = 50, offset: int = 0, with_llm: bool = False)
     page = out[offset:offset + limit]
     for i, r in enumerate(page):
         o = r["opportunity"]
-        ai_text = explain.llm_rationale(agency, r, projects) if with_llm and i < 10 else None
+        ai_text = explain.llm_rationale(agency, r, projects) if with_llm and i < 5 else None
         r["rationale"] = ai_text or explain.template_rationale(agency, r)
         r["rationale_source"] = "ai" if ai_text else "rules"
         r["grant_type"] = grant_type(o.get("funding_instruments"), o.get("competition"), o.get("cost_sharing"))

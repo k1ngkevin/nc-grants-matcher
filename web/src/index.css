@@ -1,0 +1,114 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* shadcn's dark: styles only apply under a .dark class. The app is light-only, so OS dark mode doesn't grey out inputs. */
+@custom-variant dark (&:is(.dark *));
+
+/* Palette: Blue Ridge haze + longleaf pine.
+   ridge  #1E3542  headings, header, dark text
+   pine   #1F5A45  primary actions
+   haze   #7B9DB2  accents, focus
+   mist   #F1F5F7  page background
+   Red and goldenrod are reserved for meaning (closing soon, matching funds required). */
+:root {
+  --radius: 0.5rem;
+  --background: #f1f5f7;
+  --foreground: #1e3542;
+  --card: #ffffff;
+  --card-foreground: #1e3542;
+  --popover: #ffffff;
+  --popover-foreground: #1e3542;
+  --primary: #1f5a45;
+  --primary-foreground: #ffffff;
+  --secondary: #e3ebf0;
+  --secondary-foreground: #1e3542;
+  --muted: #e9eff2;
+  --muted-foreground: #586c79;
+  --accent: #e3ebf0;
+  --accent-foreground: #1e3542;
+  --destructive: #b42318;
+  --border: #d5e0e6;
+  --input: #c3d1d9;
+  --ring: #4f7f98;
+
+  --ridge: #1e3542;
+  --haze: #7b9db2;
+  --urgent: #b42318;
+  --urgent-bg: #fcebe8;
+  --soon: #1f5a45;
+  --soon-bg: #e2f0e9;
+  --forecast: #2e6584;
+  --forecast-bg: #e2eef5;
+  --gold: #8a5a00;
+  --gold-bg: #fbf1d6;
+}
+
+@theme inline {
+  --font-sans: "Public Sans Variable", "Segoe UI", system-ui, sans-serif;
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 6px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ridge: var(--ridge);
+  --color-haze: var(--haze);
+  --color-urgent: var(--urgent);
+  --color-urgent-bg: var(--urgent-bg);
+  --color-soon: var(--soon);
+  --color-soon-bg: var(--soon-bg);
+  --color-forecast: var(--forecast);
+  --color-forecast-bg: var(--forecast-bg);
+  --color-gold: var(--gold);
+  --color-gold-bg: var(--gold-bg);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  h1, h2, h3, h4 {
+    text-wrap: balance;
+  }
+  code {
+    @apply rounded bg-black/5 px-1.5 py-0.5 text-[0.9em];
+  }
+}
+
+/* Onboarding backdrop: layered Blue Ridge ridgelines (public/ridges.svg). */
+.ridge-backdrop {
+  background: #d3e2ea url("/ridges.svg") center bottom / cover no-repeat;
+}
+
+/* One deliberate moment: the onboarding panel settles in on first load. */
+@keyframes settle {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.settle {
+  animation: settle 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .settle { animation: none; }
+}
