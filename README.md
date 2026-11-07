@@ -75,8 +75,9 @@ and 35/70 relevance points. **Strong match** needs 70 total, 27/45 semantic and 
 **Possible match**, including high totals driven by practical factors or feedback. These screening thresholds still need validation
 with agency reviewers; text similarity can overstate substantive relevance.
 
-AI previews receive the score, component points, matching mission/plan excerpt, project details and listing facts. They explain
-why points were awarded and flag domain mismatches even when the computed label is optimistic. Empty project lists are treated
+AI previews receive the score, component points, matching mission/plan excerpt, project details and listing facts. They use scoring
+evidence as background and describe the grant's fit, limitations and next check without repeating score arithmetic. They flag domain
+mismatches even when the computed label is optimistic. Empty project lists are treated
 as missing context. Explanations are cached by their exact prompt/context/score and chat deployment, so old summaries are
 replaced on demand when those inputs change; existing rows do not need to be deleted or migrated.
 
