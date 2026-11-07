@@ -3,5 +3,7 @@ web/dist/
 server/data/
 __pycache__/
 .pytest_cache/
+.venv/
 .env
 *.zip
+.vscode/
