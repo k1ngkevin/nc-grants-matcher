@@ -53,6 +53,11 @@ export const api = {
     request("DELETE", `/api/agencies/${agency}/documents/${id}`),
   subscribe: (body) => request("POST", "/api/public/subscriptions", body),
   previewEmail: (body) => request("POST", "/api/subscriptions/preview", body),
+  testEmail: (body) => request("POST", "/api/subscriptions/test", body),
+  sendFeedback: (body) => request("POST", "/api/feedback", body),
+  startResearch: (body) => request("POST", "/api/research", body),
+  savedResearch: (opportunity, agency) => request("GET", `/api/research?opportunity_id=${encodeURIComponent(opportunity)}&agency_id=${encodeURIComponent(agency)}`),
+  researchJob: (id) => request("GET", `/api/research/jobs/${encodeURIComponent(id)}`),
 };
 
 /** A notice attachment served through our server, so it can be shown in the page. */

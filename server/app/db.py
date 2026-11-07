@@ -219,6 +219,10 @@ class _PgConnection:
         self._conn = conn
 
     def execute(self, sql: str, params=()):
+        if sql.strip().upper() == "BEGIN IMMEDIATE":
+            # Match SQLite's serialized write sections for API quotas and
+            # single-use confirmation tokens across PostgreSQL workers.
+            sql = "SELECT pg_advisory_xact_lock(4243)"
         m = _INSERT_RE.match(sql)
         wants_id = bool(m and m.group(1).lower() in _SERIAL_TABLES and "RETURNING" not in sql.upper())
         if wants_id:
