@@ -39,7 +39,7 @@ form.addEventListener("submit", async (event) => {
     if (!response.ok) {
       const retry = response.headers.get("Retry-After");
       throw new Error(response.status === 429
-        ? `Too many requests. Try again in ${retry || 60} seconds.`
+        ? `${typeof data.detail === "string" ? data.detail : "Too many requests."} Try again in ${retry || 60} seconds.`
         : typeof data.detail === "string" ? data.detail : "Check your settings and try again.");
     }
     status.textContent = data.message;

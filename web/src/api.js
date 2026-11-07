@@ -11,7 +11,23 @@ async function request(method, url, body) {
       if (typeof data.detail === "string") msg = data.detail;
       else if (Array.isArray(data.detail)) msg = data.detail.map((d) => d.msg).join("; ");
     } catch {}
-    throw new Error(msg);
+    const error = new Error(msg);
+    error.status = res.status;
+    if (res.status === 429) {
+      const header = res.headers.get("Retry-After");
+      const numeric = header && /^\d+$/.test(header) ? Number(header) : NaN;
+      const retry = Number.isFinite(numeric) ? numeric : Math.ceil((Date.parse(header) - Date.now()) / 1000);
+      if (Number.isFinite(retry) && retry > 0) {
+        error.retryAfterSeconds = retry;
+        const minutes = Math.ceil(retry / 60);
+        error.message += retry < 60
+          ? ` Try again in ${retry} seconds.`
+          : ` Try again in about ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+      } else {
+        error.message += " Please wait before trying again.";
+      }
+    }
+    throw error;
   }
   const type = res.headers.get("content-type") || "";
   if (type.includes("application/json")) return res.json();
