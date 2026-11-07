@@ -157,3 +157,18 @@ def test_search_marks_grants_the_agency_already_researched(client):
     # Research is per agency: another agency's results don't show it.
     other = search(Filters(agency_id="osfm"), limit=50)["results"]
     assert all(r["research_at"] is None for r in other if r["opportunity"]["id"] == opp_id)
+
+
+def test_plain_english_and_glossary_are_kept_and_cleaned():
+    docs = [{"id": "5", "name": "NOFO.pdf", "pages": ["Eligible applicants are State and Territorial Lead Agencies."]}]
+    raw = {
+        "eligibility_evidence": [{"quote": "Eligible applicants are State and Territorial Lead Agencies.",
+                                  "plain": "Only the agency the governor named to run this program can apply.", "doc": 1, "page": 1}],
+        "glossary": [{"term": "ORLP", "meaning": "Outdoor Recreation Legacy Partnership, a park grant program."},
+                     {"term": "orlp", "meaning": "duplicate"}, {"term": "LWCF"}, "junk", {"term": "x" * 80, "meaning": "too long"}],
+    }
+    out = research._clean_result(raw, docs)
+    assert out["eligibility_evidence"][0]["plain"].startswith("Only the agency")
+    assert out["glossary"] == [{"term": "ORLP", "meaning": "Outdoor Recreation Legacy Partnership, a park grant program."}]
+    assert research._clean_result({"glossary": "nope"}, docs)["glossary"] == []
+    assert "Spell out every acronym" in research.SYSTEM_PROMPT and research.PROMPT_VERSION == 3

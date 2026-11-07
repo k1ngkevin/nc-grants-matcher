@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import {
   AlertTriangle,
@@ -12,6 +12,9 @@ import {
 } from "lucide-react";
 import { api, documentUrl, fmtDate } from "./api.js";
 import ContourField from "./ContourField.jsx";
+import EffortMatch from "./EffortMatch.jsx";
+import Explained, { GlossaryContext } from "./Explained.jsx";
+import { buildGlossary, findTerms } from "./grantTerms.js";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -113,6 +116,8 @@ export default function ResearchDialog({
   }, [open]);
 
   const data = state.data;
+  // Built-in grant terms plus this notice's own glossary, for the dotted-underline definitions.
+  const glossary = useMemo(() => (data ? buildGlossary(data.glossary) : null), [data]);
   const showDoc = (source) => {
     setDoc({ id: source.doc_id, page: source.page });
     setTab("docs");
@@ -126,6 +131,7 @@ export default function ResearchDialog({
         showCloseButton={false}
         className="flex h-[min(92vh,980px)] flex-col gap-0 overflow-hidden bg-fog p-0 sm:max-w-6xl"
       >
+        <GlossaryContext.Provider value={glossary}>
         <Tabs
           value={tab}
           onValueChange={setTab}
@@ -155,10 +161,11 @@ export default function ResearchDialog({
             </div>
             <TabsList
               variant="line"
-              className="mt-5 h-auto w-full justify-start gap-6 rounded-none p-0"
+              className="mt-5 h-auto w-full justify-start gap-6 overflow-x-auto rounded-none p-0"
             >
               {[
                 ["plan", "Plan"],
+                ["effort", "Effort & match"],
                 [
                   "docs",
                   `Notice documents${data ? ` (${data.documents.length})` : ""}`,
@@ -167,7 +174,7 @@ export default function ResearchDialog({
                 <TabsTrigger
                   key={key}
                   value={key}
-                  disabled={key === "docs" && !data}
+                  disabled={key !== "plan" && !data}
                   className="flex-none px-0 pt-1 pb-3.5 text-[15px] text-fog/65 after:bottom-0 after:h-[3px] after:bg-blaze hover:text-fog data-[state=active]:font-extrabold data-[state=active]:text-fog"
                 >
                   {label}
@@ -206,6 +213,12 @@ export default function ResearchDialog({
             )}
             {state.status === "done" && (
               <Plan data={data} r={r} onCite={showDoc} />
+            )}
+          </TabsContent>
+
+          <TabsContent value="effort" className="min-h-0 overflow-y-auto">
+            {data && (
+              <EffortMatch data={data} opportunity={o} agency={agency} onCite={showDoc} onRerun={() => start(true)} />
             )}
           </TabsContent>
 
@@ -293,6 +306,7 @@ export default function ResearchDialog({
               ))}
           </TabsContent>
         </Tabs>
+        </GlossaryContext.Provider>
 
         {state.status === "done" && (
           <footer className="flex items-center justify-between gap-4 border-t bg-white px-5 py-3 text-[12px] text-muted-foreground sm:px-8 sm:text-[13px]">
@@ -401,13 +415,19 @@ function Plan({ data, r, onCite }) {
   return (
     <div className="grid gap-x-12 gap-y-10 px-5 py-8 sm:px-8 lg:grid-cols-[minmax(0,1fr)_300px]">
       <div className="min-w-0">
+        {(data.prompt_version || 1) < 3 && (
+          <p className="mb-6 max-w-[65ch] rounded-md bg-white px-3 py-2 text-[13px] text-muted-foreground">
+            This report was written before plain-English mode. Point at any dotted term for its meaning, or use{" "}
+            <b className="font-extrabold text-pine">Run again</b> below for a plainer write-up.
+          </p>
+        )}
         <section className={cn("border-l-4 pl-5", rule)}>
           <h3 className="display-light text-[clamp(1.9rem,3.6vw,2.9rem)] leading-[1.05] tracking-[-0.02em] text-pine">
             {label}
           </h3>
           {data.verdict_summary && (
             <p className="mt-3 max-w-[65ch] text-[16px] leading-relaxed">
-              {data.verdict_summary}
+              <Explained text={data.verdict_summary} />
             </p>
           )}
           {data.eligibility_evidence.length > 0 && (
@@ -415,8 +435,14 @@ function Plan({ data, r, onCite }) {
               {data.eligibility_evidence.map((e, i) => (
                 <li key={i} className="text-[14.5px]">
                   <blockquote className="font-display text-[16px] leading-relaxed text-pine-ink/85 italic">
-                    “{e.quote}”
+                    “<Explained text={e.quote} />”
                   </blockquote>
+                  {e.plain && (
+                    <p className="mt-1 text-[14.5px]">
+                      <span className="font-extrabold text-pine">In plain English: </span>
+                      <Explained text={e.plain} />
+                    </p>
+                  )}
                   <span className="text-[12.5px] text-muted-foreground">
                     {e.doc_name},{" "}
                   </span>
@@ -437,7 +463,7 @@ function Plan({ data, r, onCite }) {
 
         {data.fit && (
           <p className="mt-6 max-w-[65ch] text-[15px] text-muted-foreground">
-            {data.fit}
+            <Explained text={data.fit} />
           </p>
         )}
 
@@ -459,7 +485,7 @@ function Plan({ data, r, onCite }) {
                     {k.date ? fmtDate(k.date) : "Date not given"}
                   </dt>
                   <dd>
-                    {k.label} <Cite source={k.source} onCite={onCite} />
+                    <Explained text={k.label} /> <Cite source={k.source} onCite={onCite} />
                   </dd>
                 </div>
               ))}
@@ -471,10 +497,10 @@ function Plan({ data, r, onCite }) {
             <ul className="flex flex-col gap-3 text-[14px]">
               {data.requirements.map((q, i) => (
                 <li key={i} className="border-l-2 border-pine-300 pl-3">
-                  <p className="font-extrabold">{q.item}</p>
+                  <p className="font-extrabold"><Explained text={q.item} /></p>
                   {q.detail && (
                     <p className="text-muted-foreground">
-                      {q.detail} <Cite source={q.source} onCite={onCite} />
+                      <Explained text={q.detail} /> <Cite source={q.source} onCite={onCite} />
                     </p>
                   )}
                 </li>
@@ -482,11 +508,12 @@ function Plan({ data, r, onCite }) {
             </ul>
           </Section>
         )}
+        <TermsUsed data={data} questions={questions} steps={steps} />
         {questions.length > 0 && (
           <Section title="Ask the program officer">
             <ul className="flex list-disc flex-col gap-2 pl-4 text-[14px] marker:text-blaze">
               {questions.map((q, i) => (
-                <li key={i}>{q}</li>
+                <li key={i}><Explained text={q} /></li>
               ))}
             </ul>
           </Section>
@@ -592,11 +619,11 @@ function Trail({ steps, onCite }) {
                   last && "text-pine",
                 )}
               >
-                {s.title}
+                <Explained text={s.title} />
               </p>
               {s.detail && (
                 <p className="mt-1 max-w-[60ch] text-[14.5px] text-muted-foreground">
-                  {s.detail} <Cite source={s.source} onCite={onCite} />
+                  <Explained text={s.detail} /> <Cite source={s.source} onCite={onCite} />
                 </p>
               )}
             </div>
@@ -604,5 +631,39 @@ function Trail({ steps, onCite }) {
         );
       })}
     </motion.ol>
+  );
+}
+
+/** Every term explained somewhere in the report, in one list: the notice's own terms first. */
+function TermsUsed({ data, questions, steps }) {
+  const glossary = useContext(GlossaryContext);
+  const used = useMemo(() => {
+    if (!glossary) return [];
+    const texts = [
+      data.verdict_summary, data.fit, ...questions,
+      ...data.eligibility_evidence.flatMap((e) => [e.quote, e.plain]),
+      ...data.key_dates.map((k) => k.label),
+      ...data.requirements.flatMap((q) => [q.item, q.detail]),
+      ...steps.flatMap((s) => [s.title, s.detail]),
+    ];
+    const found = new Map();
+    for (const g of data.glossary || []) found.set(g.term.toLowerCase(), { ...g, ai: true });
+    for (const t of texts) for (const piece of findTerms(t, glossary)) {
+      if (piece.entry) found.set(piece.entry.term.toLowerCase(), piece.entry);
+    }
+    return [...found.values()].sort((a, b) => (b.ai === true) - (a.ai === true) || a.term.localeCompare(b.term));
+  }, [glossary, data, questions, steps]);
+  if (!used.length) return null;
+  return (
+    <Section title="Terms in this report">
+      <dl className="flex flex-col gap-2.5 text-[13.5px]">
+        {used.map((t) => (
+          <div key={t.term}>
+            <dt className="font-extrabold">{t.term}</dt>
+            <dd className="text-muted-foreground">{t.meaning}</dd>
+          </div>
+        ))}
+      </dl>
+    </Section>
   );
 }
