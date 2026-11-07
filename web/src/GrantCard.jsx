@@ -17,13 +17,13 @@ const LEVEL_STYLE = {
   good: "bg-pine-100 text-pine",
   possible: "bg-muted text-muted-foreground",
 };
-// Color only where it means something: red for closing soon, a dashed outline for "not open yet".
-const TIMING_STYLE = {
-  urgent: "bg-urgent text-white font-extrabold",
-  standard: "bg-pine-100 text-pine",
-  later: "",
-  forecasted: "border-dashed border-pine-500 bg-transparent text-pine",
-};
+// Eligibility in two words; the full sentence stays in the details.
+const ELIGIBILITY_SHORT = [
+  [/^State governments/, "States eligible"],
+  [/^Public universities/, "Universities eligible"],
+  [/^Open to any/, "Anyone can apply"],
+  [/Others/, "Check the notice"],
+];
 const PART_LABELS = [
   ["semantic", "Mission & project text similarity"],
   ["program", "Program alignment & shared topics"],
@@ -32,12 +32,54 @@ const PART_LABELS = [
   ["size", "Award size"],
 ];
 
-function deadlineText(r) {
+/** Deadline as [label, big value, unit, note]. */
+function deadline(r) {
   const o = r.opportunity, s = r.signals;
-  if (s.timing === "forecasted") return o.close_date ? `Forecast, expected due ${fmtDate(o.close_date)}` : "Forecast, not open yet";
-  if (s.days_left == null) return "No close date listed";
-  if (s.days_left === 0) return "Closes today";
-  return `Closes in ${s.days_left} day${s.days_left === 1 ? "" : "s"} (${fmtDate(o.close_date)})`;
+  if (s.timing === "forecasted") return ["Forecast", "Not open", "", o.close_date ? `Due around ${fmtDate(o.close_date)}` : "No date announced"];
+  if (s.days_left == null) return ["Closes", "Rolling", "", "No close date listed"];
+  if (s.days_left === 0) return ["Closes", "Today", "", fmtDate(o.close_date)];
+  return ["Closes in", String(s.days_left), s.days_left === 1 ? "day" : "days", fmtDate(o.close_date)];
+}
+
+function Fact({ label, children, note, className }) {
+  return (
+    <div className={cn("min-w-0", className)}>
+      <dt className="text-[12px] text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5">{children}</dd>
+      {note && <dd className="mt-0.5 text-[12.5px] text-muted-foreground">{note}</dd>}
+    </div>
+  );
+}
+
+/** The four things that decide whether to look closer: time left, money, cost share, eligibility. */
+function KeyFacts({ r, className }) {
+  const o = r.opportunity, s = r.signals, g = r.grant_type;
+  const [dLabel, dValue, dUnit, dNote] = deadline(r);
+  const numeric = /^\d/.test(dValue);
+  const urgent = s.timing === "urgent";
+  const elig = ELIGIBILITY_SHORT.find(([re]) => re.test(s.eligibility || ""))?.[1] || "Check the notice";
+  const match = g.match === "Requires matching funds" ? "Required" : g.match === "No match required" ? "None" : "Not stated";
+  const big = "font-display text-[28px] leading-none font-extrabold tracking-[-0.03em] tabular-nums md:text-[32px]";
+  return (
+    <dl className={className}>
+      <Fact label={dLabel} note={dNote}>
+        <span className={cn(numeric ? big : "text-[17px] leading-tight font-extrabold", urgent ? "text-urgent" : "text-pine")}>{dValue}</span>
+        {dUnit && <span className={cn("ml-1 text-[14px] font-medium", urgent ? "text-urgent" : "text-pine")}>{dUnit}</span>}
+      </Fact>
+      <Fact label={s.amount && o.award_ceiling ? "Up to" : "Award"}
+        note={o.expected_awards ? `About ${o.expected_awards} award${o.expected_awards === 1 ? "" : "s"}` : null}>
+        {s.amount
+          ? <span className={cn(big, "text-pine")}>{money(s.amount)}</span>
+          : <span className="text-[17px] leading-tight font-extrabold text-muted-foreground">Not listed</span>}
+      </Fact>
+      <Fact label="Cost share">
+        <span className={cn("text-[15px] font-extrabold", match === "Required" ? "text-pine-ink underline decoration-blaze decoration-2 underline-offset-4" : "text-pine")}>{match}</span>
+      </Fact>
+      <Fact label="Eligibility">
+        <span className={cn("text-[15px] font-extrabold", elig === "Check the notice" ? "text-blaze-deep" : "text-pine")}>{elig}</span>
+      </Fact>
+    </dl>
+  );
 }
 
 // AI rationales sometimes use **markdown bold**; show it as bold rather than asterisks.
@@ -96,17 +138,19 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
   return (
     <div ref={ref}>
     <Card className={cn(
-      "flex-row gap-0 overflow-hidden py-0",
+      // Phone: score | title, facts strip, body.  Desktop: score | title + body | facts rail.
+      "grid gap-0 overflow-hidden py-0 grid-cols-[72px_minmax(0,1fr)] sm:grid-cols-[96px_minmax(0,1fr)] md:grid-cols-[96px_minmax(0,1fr)_200px] md:grid-rows-[auto_1fr]",
+      "[grid-template-areas:'score_head''score_facts''score_body'] md:[grid-template-areas:'score_head_facts''score_body_facts']",
       s.timing === "urgent" && "border-l-4 border-l-urgent",
       startExpanded && "ring-2 ring-ring",
     )}>
-      <div className={cn("flex w-[76px] shrink-0 flex-col items-center px-1 pt-5 pb-4 text-center sm:w-[96px]", LEVEL_STYLE[r.match_level])}
+      <div className={cn("flex flex-col items-center px-1 pt-5 pb-4 text-center [grid-area:score]", LEVEL_STYLE[r.match_level])}
         title="Ranking score out of 100. Match labels also require mission and program relevance.">
         <span className="font-display text-[44px] leading-none font-extrabold tracking-[-0.04em] tabular-nums sm:text-[52px]">{r.score}</span>
         <span className="mt-2 text-[11.5px] leading-tight font-medium">{LEVEL_LABEL[r.match_level]}</span>
       </div>
 
-      <div className="min-w-0 flex-1 p-4 sm:p-6">
+      <div className="min-w-0 px-4 pt-4 sm:px-6 sm:pt-6 [grid-area:head]">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-muted-foreground">
             <span>{o.federal_agency}</span>
             {o.number && <span className="font-mono text-[12px] tabular-nums">{o.number}</span>}
@@ -116,14 +160,18 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
             <a href={o.url} target="_blank" rel="noopener noreferrer" className="text-pine decoration-blaze decoration-2 underline-offset-4 hover:underline">{o.title}</a>
           </h3>
           <div className="flex flex-wrap gap-1.5">
-            <Chip className={TIMING_STYLE[s.timing]}>{deadlineText(r)}</Chip>
-            <Chip>{s.amount ? `Up to ${money(s.amount)}` : "Amount not listed"}</Chip>
             <Chip help={g.competition_help}>{g.competition}</Chip>
             <Chip help={g.instrument_help}>{g.instrument}</Chip>
-            <Chip className={g.match === "Requires matching funds" ? "border-pine-ink bg-transparent font-extrabold" : ""}>{g.match}</Chip>
           </div>
+      </div>
 
-          <div className="mt-4 max-w-[75ch]">
+      <KeyFacts r={r} className={cn(
+        "mx-4 mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-y py-3 sm:mx-6 [grid-area:facts]",
+        "md:m-0 md:flex md:flex-col md:gap-5 md:border-y-0 md:border-l md:bg-fog/60 md:px-5 md:py-6",
+      )} />
+
+      <div className="min-w-0 px-4 pt-4 pb-4 sm:px-6 sm:pb-6 [grid-area:body]">
+          <div className="max-w-[75ch]">
             {r.score_preview && (
               <dl className="mb-4 grid gap-x-6 gap-y-3 text-[13px] sm:grid-cols-2">
                 {[
@@ -142,7 +190,7 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
             )}
             {r.score_preview?.caution && <p className="mb-2 text-[13px] font-extrabold text-blaze-deep">{r.score_preview.caution}</p>}
             <p className="text-[13px] text-muted-foreground">{r.rationale_source === "ai" ? "AI summary" : "Why it matches"}</p>
-            <p className="mt-1 text-[15.5px] leading-relaxed">{withBold(r.rationale)}</p>
+            <p className={cn("mt-1 text-[15.5px] leading-relaxed", !expanded && "line-clamp-3")}>{withBold(r.rationale)}</p>
             {s.feedback_notes?.length > 0 && <p className="mt-1 text-[13px] text-muted-foreground italic">Adjusted because {s.feedback_notes.join("; ")}.</p>}
           </div>
 
