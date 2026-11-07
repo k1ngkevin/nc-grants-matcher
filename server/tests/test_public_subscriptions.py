@@ -168,3 +168,31 @@ def test_public_confirmation_mandatory_and_streamed_body_limit(public_client, mo
     response = client.get(f"/api/public/subscriptions/confirm?token={token}")
     assert response.headers["referrer-policy"] == "no-referrer"
     assert response.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.parametrize("origin", ["null", "https://mail.google.com", "http://127.0.0.1:8000"])
+def test_email_link_actions_allow_foreign_origin_with_valid_token(public_client, origin):
+    client, sent = public_client
+    email = "origin-confirm-public@gmail.com"
+    assert signup(client, email).status_code == 202
+    token = pending(email)["token"]
+    path = f"/api/public/subscriptions/confirm?token={token}"
+    response = client.post(path, headers={"origin": origin})
+    assert response.status_code == 200 and "Your subscription is confirmed" in response.text
+    assert len(sent) == 2
+    # An invalid token does not authorize a state change or additional email.
+    response = client.post("/api/public/subscriptions/confirm?token=invalid", headers={"origin": origin})
+    assert "invalid or expired" in response.text and len(sent) == 2
+    with db.session() as conn:
+        sub = conn.execute("SELECT token FROM subscriptions WHERE email=? AND active=1 ORDER BY id DESC", (email,)).fetchone()
+    assert sub is not None
+    response = client.post(f"/api/subscriptions/unsubscribe?token={sub['token']}",
+                           data={"List-Unsubscribe": "One-Click"}, headers={"origin": origin})
+    assert response.status_code == 200 and emailer.find_subscription(sub["token"]) is None
+
+
+def test_foreign_origin_signup_still_rejected(public_client):
+    client, sent = public_client
+    response = client.post("/api/public/subscriptions", json={"email": "cross-origin@gmail.com", "agency_id": "deq"},
+                           headers={"origin": "null"})
+    assert response.status_code == 403 and not sent

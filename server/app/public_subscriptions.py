@@ -25,6 +25,13 @@ PUBLIC_PATHS = {
     "/api/subscriptions/unsubscribe": {"GET", "POST"},
 }
 
+# These POST actions authorize via the random email-link token. Email clients
+# and privacy-isolated browser tabs may submit them with a foreign or null Origin.
+TOKEN_ACTION_PATHS = {
+    "/api/public/subscriptions/confirm",
+    "/api/subscriptions/unsubscribe",
+}
+
 
 def is_public(request: Request):
     return request.method in PUBLIC_PATHS.get(request.url.path, set())

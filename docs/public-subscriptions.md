@@ -37,6 +37,10 @@ public signup always accepts all syntactically valid email domains independently
   and no-referrer token pages provide additional safeguards.
 - Unsubscribe uses the random link token and requires POST to change state. It
   works without sign-in, including mail clients' one-click unsubscribe POSTs.
+  Public confirmation and unsubscribe POSTs accept foreign or `null` Origin
+  headers because their random tokens authorize the action. This supports
+  privacy-isolated email browser tabs; signup and other writes still reject
+  foreign origins. GET requests never confirm or unsubscribe a recipient.
 
 Use one scheduler-enabled replica with the current SQLite deployment. For public
 internet deployment, also apply edge/WAF rate limits and request/time limits so

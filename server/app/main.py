@@ -105,7 +105,8 @@ async def authenticate(request: Request, call_next):
             chunks.append(chunk)
         request._body = b"".join(chunks)
         origin = request.headers.get("origin")
-        if origin and origin != config.PUBLIC_BASE_URL:
+        token_action = request.method == "POST" and request.url.path in public_subscriptions.TOKEN_ACTION_PATHS
+        if origin and origin != config.PUBLIC_BASE_URL and not token_action:
             return JSONResponse({"detail": "Cross-origin requests are not allowed."}, status_code=403)
         if request.url.path in {"/api/public/subscriptions"} and request.headers.get("content-type", "").split(";")[0] != "application/json":
             return JSONResponse({"detail": "Use application/json."}, status_code=415)
