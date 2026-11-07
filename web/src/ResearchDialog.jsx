@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { api, documentUrl, downloadGrantCalendar, fmtDate } from "./api.js";
 import ContourField from "./ContourField.jsx";
+import AskPanel from "./AskPanel.jsx";
 import EffortMatch from "./EffortMatch.jsx";
 import Explained, { GlossaryContext } from "./Explained.jsx";
 import { buildGlossary, findTerms } from "./grantTerms.js";
@@ -168,6 +169,7 @@ export default function ResearchDialog({
               {[
                 ["plan", "Plan"],
                 ["effort", "Effort & match"],
+                ["ask", "Ask"],
                 [
                   "docs",
                   `Notice documents${data ? ` (${data.documents.length})` : ""}`,
@@ -216,6 +218,11 @@ export default function ResearchDialog({
             {state.status === "done" && (
               <Plan data={data} r={r} onCite={showDoc} />
             )}
+          </TabsContent>
+
+          {/* Kept mounted while hidden, so reading a cited page doesn't wipe the conversation. */}
+          <TabsContent value="ask" forceMount className="flex min-h-0 flex-col data-[state=inactive]:hidden">
+            {data && <AskPanel opportunity={o} agency={agency} onCite={showDoc} />}
           </TabsContent>
 
           <TabsContent value="effort" className="min-h-0 overflow-y-auto">

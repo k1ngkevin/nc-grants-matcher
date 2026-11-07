@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CalendarPlus, ChevronDown, ExternalLink, FileCheck2, FileSearch, Flag } from "lucide-react";
+import { CalendarPlus, ChevronDown, ExternalLink, FileCheck2, FileSearch, Flag, MessageCircleQuestion } from "lucide-react";
 import { downloadGrantCalendar, fmtDate, money, store } from "./api.js";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import ResearchDialog from "./ResearchDialog.jsx";
+import { AskDialog } from "./AskPanel.jsx";
 
 const LEVEL_LABEL = { strong: "Strong match", good: "Good match", possible: "Possible match" };
 // Strong matches invert to solid pine; weaker ones step down in weight, not hue.
@@ -115,6 +116,9 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
   const [researchAt, setResearchAt] = useState(r.research_at || null);
   useEffect(() => { if (r.research_at) setResearchAt(r.research_at); }, [r.research_at]);
   const openResearch = () => { setResearchMounted(true); setResearchOpen(true); };
+  const [askOpen, setAskOpen] = useState(false);
+  const [askMounted, setAskMounted] = useState(false); // keep the conversation while the card is on screen
+  const openAsk = () => { setAskMounted(true); setAskOpen(true); };
 
   useEffect(() => {
     if (startExpanded && ref.current) ref.current.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -243,6 +247,11 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
                   <TooltipContent className="max-w-xs">Reads the notice PDFs with AI. Needs Azure OpenAI chat to be set up on the server.</TooltipContent>
                 </Tooltip>
               )}
+              {canResearch && (
+                <Button size="sm" variant="outline" className="border-pine-300 text-pine" onClick={openAsk}>
+                  <MessageCircleQuestion /> Ask about this grant
+                </Button>
+              )}
               <CollapsibleTrigger asChild>
                 <Button size="sm" variant="link" className="px-0 sm:ml-auto">
                   {expanded ? "Hide details" : "Details & how it was scored"}
@@ -346,6 +355,7 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
           </Collapsible>
       </div>
     </Card>
+    {askMounted && <AskDialog open={askOpen} onOpenChange={setAskOpen} opportunity={o} agency={agency} />}
     {researchMounted && <ResearchDialog open={researchOpen} onOpenChange={setResearchOpen} result={r} agency={agency} onDone={setResearchAt} />}
     </div>
   );

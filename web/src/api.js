@@ -58,6 +58,7 @@ export const api = {
   startResearch: (body) => request("POST", "/api/research", body),
   savedResearch: (opportunity, agency) => request("GET", `/api/research?opportunity_id=${encodeURIComponent(opportunity)}&agency_id=${encodeURIComponent(agency)}`),
   researchJob: (id) => request("GET", `/api/research/jobs/${encodeURIComponent(id)}`),
+  ask: (body) => request("POST", "/api/chat", body),
   calendar: (body) => request("POST", "/api/calendar", body),
   calendarIcs: (body) => request("POST", "/api/calendar.ics", body),
 };
