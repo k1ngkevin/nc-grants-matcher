@@ -32,7 +32,7 @@ async function request(method, url, body) {
   }
   const type = res.headers.get("content-type") || "";
   if (type.includes("application/json")) return res.json();
-  if (type.includes("text/csv")) return res.blob();
+  if (type.includes("text/csv") || type.includes("text/calendar")) return res.blob();
   return res.text();
 }
 
@@ -58,7 +58,24 @@ export const api = {
   startResearch: (body) => request("POST", "/api/research", body),
   savedResearch: (opportunity, agency) => request("GET", `/api/research?opportunity_id=${encodeURIComponent(opportunity)}&agency_id=${encodeURIComponent(agency)}`),
   researchJob: (id) => request("GET", `/api/research/jobs/${encodeURIComponent(id)}`),
+  calendar: (body) => request("POST", "/api/calendar", body),
+  calendarIcs: (body) => request("POST", "/api/calendar.ics", body),
 };
+
+/** Save a Blob as a file. */
+export function saveFile(blob, filename) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/** Download one grant's dates (deadline, plus its research timeline if saved) as an .ics file. */
+export async function downloadGrantCalendar(agencyId, opportunityId) {
+  const blob = await api.calendarIcs({ agency_id: agencyId, opportunity_id: opportunityId, include: ["research"] });
+  saveFile(blob, `grant-${opportunityId.replace(/[^A-Za-z0-9]+/g, "-")}.ics`);
+}
 
 /** A notice attachment served through our server, so it can be shown in the page. */
 export function documentUrl(opportunityId, docId, page) {

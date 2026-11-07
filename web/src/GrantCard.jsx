@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ExternalLink, FileCheck2, FileSearch, Flag } from "lucide-react";
-import { fmtDate, money, store } from "./api.js";
+import { CalendarPlus, ChevronDown, ExternalLink, FileCheck2, FileSearch, Flag } from "lucide-react";
+import { downloadGrantCalendar, fmtDate, money, store } from "./api.js";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -329,6 +329,12 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
                     Open full announcement on {o.source === "sample" ? "Grants.gov (sample link)" : "Grants.gov"} <ExternalLink />
                   </a>
                 </Button>
+                  {o.close_date && (
+                    <Button variant="link" size="sm" className="h-auto p-0 text-pine" disabled={busy}
+                      onClick={() => downloadGrantCalendar(agency.id, o.id).catch((e) => setMsg(e.message))}>
+                      <CalendarPlus /> Add {researchAt ? "deadline and research timeline" : "deadline"} to my calendar
+                    </Button>
+                  )}
                   {onFeedback && (
                     <Button variant="link" size="sm" className="h-auto p-0 text-muted-foreground hover:text-pine" onClick={onFeedback}>
                       <Flag /> Report a problem with this grant

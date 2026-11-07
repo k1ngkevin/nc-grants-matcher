@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import {
   AlertTriangle,
+  CalendarPlus,
   ExternalLink,
   FileText,
   Loader2,
@@ -10,7 +11,7 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
-import { api, documentUrl, fmtDate } from "./api.js";
+import { api, documentUrl, downloadGrantCalendar, fmtDate } from "./api.js";
 import ContourField from "./ContourField.jsx";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,7 @@ export default function ResearchDialog({
   const [state, setState] = useState({ status: "loading" }); // loading | running | done | error
   const [tab, setTab] = useState("plan");
   const [doc, setDoc] = useState(null); // { id, page }
+  const [calendarError, setCalendarError] = useState("");
   const poll = useRef(null);
 
   const follow = useCallback((job) => {
@@ -304,15 +306,25 @@ export default function ResearchDialog({
                 ` on ${fmtDate(data.created_at.slice(0, 10))}`}
               . Check every date and requirement against the notice before you
               act.
+              {calendarError && <span className="block font-medium text-urgent" role="alert">Couldn't make the calendar file: {calendarError}</span>}
             </p>
-            <Button
-              size="sm"
-              variant="outline"
-              className="shrink-0"
-              onClick={() => start(true)}
-            >
-              <RefreshCw /> Run again
-            </Button>
+            <div className="flex shrink-0 flex-wrap justify-end gap-2">
+              <Button
+                size="sm"
+                variant="blaze"
+                onClick={() => { setCalendarError(""); downloadGrantCalendar(agency.id, o.id).catch((e) => setCalendarError(e.message)); }}
+                title="Download the deadline and every dated step as an .ics file for Outlook, Google or Apple Calendar"
+              >
+                <CalendarPlus /> Add timeline to calendar
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => start(true)}
+              >
+                <RefreshCw /> Run again
+              </Button>
+            </div>
           </footer>
         )}
       </DialogContent>

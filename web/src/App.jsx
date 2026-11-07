@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { AlertTriangle, BookOpen, Download, Loader2, MessageSquarePlus } from "lucide-react";
+import { AlertTriangle, BookOpen, CalendarDays, Download, Loader2, MessageSquarePlus } from "lucide-react";
 import { api, fmtDate, store } from "./api.js";
+import CalendarView from "./CalendarView.jsx";
 import GrantCard from "./GrantCard.jsx";
 import ScoreFilter from "./ScoreFilter.jsx";
 import { EmailSignup, Filters, ImproveMatches } from "./Sidebar.jsx";
@@ -52,6 +53,7 @@ export default function App() {
   const [agencyId, setAgencyId] = useState(() => urlParams().agency || store.get("agency"));
   const [filters, setFilters] = useState(null);
   const [view, setView] = useState("recommended");
+  const [calendar, setCalendar] = useState(false); // the Calendar tab; the grant list keeps its own view underneath
   const [limit, setLimit] = useState(25);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -150,6 +152,15 @@ export default function App() {
     setFocusOpp(null);
   };
 
+  // From the calendar back to one grant, in whichever list it lives.
+  const openGrant = (opp, status) => {
+    setCalendar(false);
+    setView(status);
+    setLimit(25);
+    setFocusOpp(opp.id);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const pickAgency = (id) => {
     setAgencyId(id);
     setView("recommended");
@@ -158,6 +169,7 @@ export default function App() {
   };
 
   const goHome = () => {
+    setCalendar(false);
     setAgencyId(null);
     setData(null);
     store.set("agency", null);
@@ -223,7 +235,10 @@ export default function App() {
                 </div>
               </div>
 
-              <Tabs value={view} onValueChange={(v) => { setView(v); setLimit(25); setFocusOpp(null); }} className="mt-10">
+              <Tabs value={calendar ? "calendar" : view} onValueChange={(v) => {
+                if (v === "calendar") { setCalendar(true); setFocusOpp(null); return; }
+                setCalendar(false); setView(v); setLimit(25); setFocusOpp(null);
+              }} className="mt-10">
                 <TabsList variant="line" className="h-auto w-full justify-start gap-6 overflow-x-auto rounded-none p-0">
                   {TABS.map(([key, label]) => (
                     <TabsTrigger key={key} value={key}
@@ -234,12 +249,21 @@ export default function App() {
                       </Badge>
                     </TabsTrigger>
                   ))}
+                  <TabsTrigger value="calendar"
+                    className="flex-none gap-2 px-0 pt-1 pb-4 text-[15px] text-fog/65 after:bottom-0 after:h-[3px] after:bg-blaze hover:text-fog data-[state=active]:font-extrabold data-[state=active]:text-fog sm:ml-auto">
+                    <CalendarDays className="size-4" /> Calendar
+                  </TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
           </header>
 
           <main className="fog-field flex-1">
+            {calendar ? (
+              <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
+                <CalendarView agency={agency} filters={{ ...filters, q: debouncedQ }} onOpenGrant={openGrant} />
+              </div>
+            ) : (
             <div className="mx-auto grid w-full max-w-7xl items-start gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[300px_minmax(0,1fr)]">
               <aside className="order-2 flex flex-col gap-4 lg:order-1">
                 <Filters
@@ -323,13 +347,14 @@ export default function App() {
                 </p>
               </section>
             </div>
+            )}
           </main>
         </>
       )}
 
       <Glossary meta={meta} open={showGlossary} onOpenChange={setShowGlossary} />
       <FeedbackDialog open={feedback.open} onOpenChange={(open) => setFeedback((f) => ({ ...f, open }))}
-        agency={agency} opportunity={feedback.opportunity} initialKind={feedback.kind} page={agency ? view : "landing"} />
+        agency={agency} opportunity={feedback.opportunity} initialKind={feedback.kind} page={agency ? (calendar ? "calendar" : view) : "landing"} />
     </div>
   );
 }
