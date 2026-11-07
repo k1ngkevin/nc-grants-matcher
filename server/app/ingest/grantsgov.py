@@ -6,6 +6,7 @@
 Eligibility is filtered at the source (only applicant types NC state entities can
 use), and expired opportunities are skipped before we spend calls on details.
 """
+import html
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
@@ -105,7 +106,7 @@ def normalize(hit: dict, detail: dict | None) -> dict:
         "id": f"grantsgov:{oid}",
         "source": "grants.gov",
         "number": hit.get("number") or detail.get("opportunityNumber"),
-        "title": hit.get("title") or detail.get("opportunityTitle") or "(untitled)",
+        "title": html.unescape(hit.get("title") or detail.get("opportunityTitle") or "(untitled)"),
         "federal_agency": _first(body, "agencyName") or hit.get("agencyName") or hit.get("agency") or hit.get("agencyCode"),
         "federal_agency_code": hit.get("agencyCode") or detail.get("owningAgencyCode"),
         "description": description,

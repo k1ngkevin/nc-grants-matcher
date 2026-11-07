@@ -5,6 +5,7 @@ index or column name). For Postgres, a thin wrapper below translates that, so ca
 Stick to SQL both databases understand (e.g. INSERT ... ON CONFLICT, not INSERT OR REPLACE).
 `BEGIN IMMEDIATE` is the one SQLite statement translated (to a Postgres transaction lock).
 """
+import html
 import json
 import re
 import sqlite3
@@ -288,6 +289,12 @@ def init_db() -> None:
             conn.executescript(_pg_schema())
         else:
             conn.executescript(SCHEMA)
+        # Repair titles imported before entity decoding, including grants kept by reviewers.
+        rows = conn.execute("SELECT id, title FROM opportunities WHERE title LIKE '%&%;%'").fetchall()
+        for row in rows:
+            title = html.unescape(row["title"])
+            if title != row["title"]:
+                conn.execute("UPDATE opportunities SET title=? WHERE id=?", (title, row["id"]))
 
 
 def row_to_dict(row) -> dict:
