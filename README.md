@@ -9,7 +9,9 @@ or toggle **Include lower scores** to see all scores while keeping your chosen c
 grants are hidden. Your preferences are remembered in this browser; **Reset** restores 50+. Saved, Pursuing and Dismissed grants
 remain visible regardless of score. CSV exports and new email subscriptions use the selected score settings.
 
-![Results page for DNCR (sample data)](docs/screenshot.png)
+![NCDOT recommendations with score filtering and AI match previews using live Grants.gov data](docs/screenshot.png)
+
+*NCDOT results showing the minimum-score filter, relevance breakdown, AI previews, and email alerts. Captured November 7, 2026.*
 
 ```
 Grants.gov ─┐                       ┌─ Guardrails ─┐   ┌─ Blended score ─┐   ┌─ Website (React) ─┐

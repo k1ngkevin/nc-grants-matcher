@@ -38,13 +38,9 @@ export default function AgencyPicker({ agencies, value, onChange, id, placeholde
   );
 }
 
-/** Small ridgeline mark used in the header. */
-export function RidgeMark({ className }) {
+/** The header and browser icons share the same bridge artwork. */
+export function BridgeMark({ className }) {
   return (
-    <svg viewBox="0 0 32 32" aria-hidden="true" className={className}>
-      <rect width="32" height="32" rx="7" fill="#ffffff" />
-      <path d="M3 23 L10 14 L14 18 L20 10 L29 21 L29 26 L3 26 Z" fill="#7b9db2" />
-      <path d="M3 26 L9 20 L14 23 L21 16 L29 24 L29 26 Z" fill="#1f5a45" />
-    </svg>
+    <img src="/favicon.svg?v=bridge" width="32" height="32" alt="" aria-hidden="true" className={className} />
   );
 }

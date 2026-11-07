@@ -5,7 +5,7 @@ import GrantCard from "./GrantCard.jsx";
 import ScoreFilter from "./ScoreFilter.jsx";
 import { EmailSignup, Filters, ImproveMatches } from "./Sidebar.jsx";
 import Glossary from "./Glossary.jsx";
-import AgencyPicker, { RidgeMark } from "./AgencyPicker.jsx";
+import AgencyPicker, { BridgeMark } from "./AgencyPicker.jsx";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -184,7 +184,7 @@ export default function App() {
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
           <a href="/" className="flex items-center gap-3 rounded-md text-white no-underline focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
             onClick={(e) => { e.preventDefault(); goHome(); }}>
-            <RidgeMark className="size-9 shrink-0" />
+            <BridgeMark className="size-9 shrink-0" />
             <span className="leading-tight">
               <strong className="block text-[17px] font-semibold">NC Federal Funds Matchmaker</strong>
               <small className="hidden text-[13px] text-white/70 sm:block">Federal grants your agency can win, ranked and explained</small>
