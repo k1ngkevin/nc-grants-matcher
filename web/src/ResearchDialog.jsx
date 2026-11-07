@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { api, documentUrl, downloadGrantCalendar, fmtDate } from "./api.js";
 import ContourField from "./ContourField.jsx";
-import AskPanel from "./AskPanel.jsx";
+import AskPanel, { GRANTBOT_HELLO, GRANTBOT_HELPS } from "./AskPanel.jsx";
 import EffortMatch from "./EffortMatch.jsx";
 import { TrailLoader } from "./StateSurvey.jsx";
 import Explained, { GlossaryContext } from "./Explained.jsx";
@@ -28,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 const VERDICT = {
@@ -170,21 +171,32 @@ export default function ResearchDialog({
               {[
                 ["plan", "Plan"],
                 ["effort", "Effort & match"],
-                ["ask", "Ask"],
+                ["ask", "GrantBot"],
                 [
                   "docs",
                   `Notice documents${data ? ` (${data.documents.length})` : ""}`,
                 ],
-              ].map(([key, label]) => (
-                <TabsTrigger
-                  key={key}
-                  value={key}
-                  disabled={key !== "plan" && !data}
-                  className="flex-none px-0 pt-1 pb-3.5 text-[15px] text-fog/65 after:bottom-0 after:h-[3px] after:bg-blaze hover:text-fog data-[state=active]:font-extrabold data-[state=active]:text-fog"
-                >
-                  {label}
-                </TabsTrigger>
-              ))}
+              ].map(([key, label]) => {
+                const tab = (
+                  <TabsTrigger
+                    key={key}
+                    value={key}
+                    disabled={key !== "plan" && !data}
+                    className="flex-none px-0 pt-1 pb-3.5 text-[15px] text-fog/65 after:bottom-0 after:h-[3px] after:bg-blaze hover:text-fog data-[state=active]:font-extrabold data-[state=active]:text-fog"
+                  >
+                    {label}
+                  </TabsTrigger>
+                );
+                return key === "ask" ? (
+                  <Tooltip key={key}>
+                    <TooltipTrigger asChild>{tab}</TooltipTrigger>
+                    <TooltipContent className="max-w-xs text-[12.5px] leading-snug">
+                      <span className="block font-extrabold">{GRANTBOT_HELLO}</span>
+                      {GRANTBOT_HELPS}
+                    </TooltipContent>
+                  </Tooltip>
+                ) : tab;
+              })}
             </TabsList>
           </header>
 

@@ -10,7 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import ResearchDialog from "./ResearchDialog.jsx";
-import { AskDialog } from "./AskPanel.jsx";
+import { AskDialog, GRANTBOT_HELLO, GRANTBOT_HELPS } from "./AskPanel.jsx";
 
 const LEVEL_LABEL = { strong: "Strong match", good: "Good match", possible: "Possible match" };
 // Strong matches invert to solid pine; weaker ones step down in weight, not hue.
@@ -248,9 +248,17 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
                 </Tooltip>
               )}
               {canResearch && (
-                <Button size="sm" variant="outline" className="border-pine-300 text-pine" onClick={openAsk}>
-                  <MessageCircleQuestion /> Ask about this grant
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button size="sm" variant="outline" className="border-pine-300 text-pine" onClick={openAsk}>
+                      <MessageCircleQuestion /> Ask GrantBot
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-[12.5px] leading-snug">
+                    <span className="block font-extrabold">{GRANTBOT_HELLO}</span>
+                    {GRANTBOT_HELPS}
+                  </TooltipContent>
+                </Tooltip>
               )}
               <CollapsibleTrigger asChild>
                 <Button size="sm" variant="link" className="px-0 sm:ml-auto">

@@ -1,7 +1,8 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertTriangle, ArrowUp, FileText, Loader2, MessageCircleQuestion, X } from "lucide-react";
+import { AlertTriangle, ArrowUp, FileText, Loader2, X } from "lucide-react";
 import { api, documentUrl } from "./api.js";
+import { BridgeMark } from "./AgencyPicker.jsx";
 import ContourField from "./ContourField.jsx";
 import Explained, { GlossaryContext } from "./Explained.jsx";
 import { buildGlossary } from "./grantTerms.js";
@@ -20,6 +21,33 @@ const STARTERS = [
   "Are there deadlines before the due date?",
 ];
 const HISTORY_TURNS = 6;
+
+/** How GrantBot introduces itself: on hover, and as its first message. One wording everywhere. */
+export const GRANTBOT_HELLO = "Hi, I'm GrantBot.";
+export const GRANTBOT_HELPS =
+  "I can help you with this grant: who can apply, the cost share, deadlines, page limits, and what the money can pay for. " +
+  "I answer only from the notice documents and the listing, and I show you the page each answer came from.";
+
+/** GrantBot's face: the GrantNC bridge. */
+export function GrantBotAvatar({ className }) {
+  return (
+    <span aria-hidden="true" className={cn("grid size-8 shrink-0 place-items-center rounded-full bg-white ring-1 ring-border", className)}>
+      <BridgeMark className="size-6 rounded-sm" />
+    </span>
+  );
+}
+
+function FromGrantBot({ children }) {
+  return (
+    <div className="flex max-w-[92%] items-start gap-2.5">
+      <GrantBotAvatar className="mt-5" />
+      <div className="min-w-0">
+        <p className="mb-1 text-[12px] font-extrabold text-pine">GrantBot</p>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 /** Questions and answers about one grant, from its notice documents. `onCite` opens a cited page;
     without it, citations open the PDF in a new tab. Nothing is saved: closing the page clears it. */
@@ -60,23 +88,25 @@ export default function AskPanel({ opportunity: o, agency, onCite, className }) 
     <GlossaryContext.Provider value={glossary}>
       <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6 sm:px-8" role="log" aria-live="polite" aria-label="Questions and answers">
-          {turns.length === 0 ? (
-            <div className="mx-auto max-w-2xl pt-4">
-              <p className="display-light text-[clamp(2rem,4vw,2.9rem)] leading-[1.05] tracking-[-0.02em] text-pine">Ask anything about this grant</p>
-              <p className="mt-3 max-w-[60ch] text-[15px] text-muted-foreground">
-                Answers come only from the notice documents and the listing, in plain English, with the page each one came from.
-              </p>
-              <ul className="mt-6 flex flex-wrap gap-2">
-                {STARTERS.map((q) => (
-                  <li key={q}>
-                    <Button variant="outline" size="sm" className="h-auto rounded-full bg-white px-3.5 py-1.5 text-left text-[13.5px] whitespace-normal"
-                      onClick={() => send(q)}>{q}</Button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : (
+          {(
             <ol className="mx-auto flex max-w-3xl flex-col gap-5">
+              <li className="flex justify-start">
+                <FromGrantBot>
+                  <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}
+                    className="rounded-2xl rounded-tl-sm border bg-white px-4 py-3 shadow-xs">
+                    <p className="font-display text-[22px] leading-tight font-extrabold tracking-[-0.01em] text-pine">{GRANTBOT_HELLO}</p>
+                    <p className="mt-1.5 text-[15px] leading-relaxed">{GRANTBOT_HELPS}</p>
+                  </motion.div>
+                </FromGrantBot>
+              </li>
+              {turns.length === 0 && (
+                <li className="flex flex-wrap gap-2 pl-[42px]">
+                  {STARTERS.map((q) => (
+                    <Button key={q} variant="outline" size="sm" className="h-auto rounded-full bg-white px-3.5 py-1.5 text-left text-[13.5px] whitespace-normal"
+                      onClick={() => send(q)}>{q}</Button>
+                  ))}
+                </li>
+              )}
               <AnimatePresence initial={false}>
                 {turns.map((t, i) => (
                   <motion.li key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}
@@ -84,27 +114,28 @@ export default function AskPanel({ opportunity: o, agency, onCite, className }) 
                     {t.role === "user" ? (
                       <p className="max-w-[85%] rounded-2xl rounded-br-sm bg-pine px-4 py-2.5 text-[15px] text-fog">{t.content}</p>
                     ) : t.error ? (
-                      <div className="max-w-[85%] rounded-2xl rounded-bl-sm border border-urgent/30 bg-urgent-bg px-4 py-3 text-[14.5px]">
+                      <FromGrantBot><div className="rounded-2xl rounded-tl-sm border border-urgent/30 bg-urgent-bg px-4 py-3 text-[14.5px]">
                         <p className="flex items-start gap-2 text-urgent"><AlertTriangle className="mt-0.5 size-4 shrink-0" /> {t.content}</p>
                         {i === turns.length - 1 && (
                           <Button size="sm" variant="outline" className="mt-2 bg-white" disabled={busy}
                             onClick={() => send(t.retry, turns.slice(0, -2))}>Try again</Button>
                         )}
-                      </div>
+                      </div></FromGrantBot>
                     ) : (
-                      <Answer turn={t} onCite={openCite} />
+                      <FromGrantBot><Answer turn={t} onCite={openCite} /></FromGrantBot>
                     )}
                   </motion.li>
                 ))}
               </AnimatePresence>
               {busy && (
-                <li className="flex items-center gap-2 text-[14px] text-muted-foreground" role="status">
+                <li className="flex items-center gap-2.5 text-[14px] text-muted-foreground" role="status">
+                  <GrantBotAvatar />
                   <TrailLoader />
-                  Reading the notice{turns.length <= 1 ? ". The first question can take up to a minute while the documents download." : "…"}
+                  GrantBot is reading the notice{turns.length <= 1 ? ". The first question can take up to a minute while the documents download." : "…"}
                 </li>
               )}
               {!busy && lastAnswer?.follow_ups?.length > 0 && turns.at(-1) === lastAnswer && (
-                <li className="flex flex-wrap gap-2 pl-1">
+                <li className="flex flex-wrap gap-2 pl-[42px]">
                   {lastAnswer.follow_ups.map((q) => (
                     <Button key={q} variant="outline" size="sm" className="h-auto rounded-full bg-white px-3 py-1 text-left text-[13px] whitespace-normal"
                       onClick={() => send(q)}>{q}</Button>
@@ -120,11 +151,11 @@ export default function AskPanel({ opportunity: o, agency, onCite, className }) 
           <div className="mx-auto flex max-w-3xl items-end gap-2">
             <label htmlFor={`ask-${o.id}`} className="sr-only">Your question</label>
             <Textarea id={`ask-${o.id}`} ref={inputRef} value={draft} maxLength={1000} rows={1}
-              placeholder="Ask a question about this grant"
+              placeholder="Ask GrantBot about this grant"
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(draft); } }}
               className="max-h-40 min-h-11 resize-none bg-white text-[15px]" />
-            <Button type="submit" size="icon" className="size-11 shrink-0" disabled={busy || draft.trim().length < 3} aria-label="Ask">
+            <Button type="submit" size="icon" className="size-11 shrink-0" disabled={busy || draft.trim().length < 3} aria-label="Send to GrantBot">
               {busy ? <Loader2 className="animate-spin" /> : <ArrowUp />}
             </Button>
           </div>
@@ -139,7 +170,7 @@ export default function AskPanel({ opportunity: o, agency, onCite, className }) 
 
 function Answer({ turn: t, onCite }) {
   return (
-    <div className="max-w-[90%] rounded-2xl rounded-bl-sm border bg-white px-4 py-3 shadow-xs">
+    <div className="rounded-2xl rounded-tl-sm border bg-white px-4 py-3 shadow-xs">
       {!t.found && <Badge className="mb-2 bg-blaze-tint text-[11px] text-blaze-deep">Not in the notice</Badge>}
       <p className="text-[15px] leading-relaxed whitespace-pre-line"><Explained text={t.content} /></p>
       {t.citations?.length > 0 && (
@@ -172,8 +203,8 @@ export function AskDialog({ open, onOpenChange, opportunity: o, agency }) {
           <ContourField className="-z-10 opacity-30" />
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <DialogDescription className="flex items-center gap-1.5 text-[13px] text-fog/70">
-                <MessageCircleQuestion className="size-3.5" /> Ask about this grant · {agency.name}
+              <DialogDescription className="flex items-center gap-2 text-[13px] text-fog/75">
+                <GrantBotAvatar className="size-6" /> GrantBot, for {agency.name}
               </DialogDescription>
               <DialogTitle className="mt-1 text-xl leading-snug font-extrabold tracking-[-0.01em]">{o.title}</DialogTitle>
             </div>
