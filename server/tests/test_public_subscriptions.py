@@ -97,8 +97,11 @@ def test_recipient_and_ip_limits(public_client):
         assert signup(client, "limited-public@gmail.com").status_code == 202
     response = signup(client, "limited-public@gmail.com")
     assert response.status_code == 429 and int(response.headers["retry-after"]) > 0
+    assert "email address (3 per hour)" in response.json()["detail"]
     assert signup(client, "another-public@gmail.com").status_code == 202
-    assert signup(client, "third-public@gmail.com").status_code == 429
+    response = signup(client, "third-public@gmail.com")
+    assert response.status_code == 429
+    assert "connection (5 attempts per hour)" in response.json()["detail"]
     assert len(sent) == 4
 
 

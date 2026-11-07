@@ -24,6 +24,8 @@ services:
         required: false
     environment:
       DATABASE_URL: postgresql://matchmaker:${POSTGRES_PASSWORD:-matchmaker}@db:5432/matchmaker
+      APP_ENV: ${APP_ENV:-development}
+      AUTH_MODE: ${AUTH_MODE:-development}
       FORWARDED_ALLOW_IPS: "*"   # only reachable through the web service, so trust its X-Forwarded-For
     volumes:
       - apidata:/data              # email outbox when no mail server is set

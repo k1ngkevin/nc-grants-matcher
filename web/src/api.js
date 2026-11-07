@@ -12,7 +12,23 @@ async function request(method, url, body) {
       else if (Array.isArray(data.detail))
         msg = data.detail.map((d) => d.msg).join("; ");
     } catch {}
-    throw new Error(msg);
+    const error = new Error(msg);
+    error.status = res.status;
+    if (res.status === 429) {
+      const header = res.headers.get("Retry-After");
+      const numeric = header && /^\d+$/.test(header) ? Number(header) : NaN;
+      const retry = Number.isFinite(numeric) ? numeric : Math.ceil((Date.parse(header) - Date.now()) / 1000);
+      if (Number.isFinite(retry) && retry > 0) {
+        error.retryAfterSeconds = retry;
+        const minutes = Math.ceil(retry / 60);
+        error.message += retry < 60
+          ? ` Try again in ${retry} seconds.`
+          : ` Try again in about ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+      } else {
+        error.message += " Please wait before trying again.";
+      }
+    }
+    throw error;
   }
   const type = res.headers.get("content-type") || "";
   if (type.includes("application/json")) return res.json();
@@ -37,6 +53,11 @@ export const api = {
     request("DELETE", `/api/agencies/${agency}/documents/${id}`),
   subscribe: (body) => request("POST", "/api/public/subscriptions", body),
   previewEmail: (body) => request("POST", "/api/subscriptions/preview", body),
+  testEmail: (body) => request("POST", "/api/subscriptions/test", body),
+  sendFeedback: (body) => request("POST", "/api/feedback", body),
+  startResearch: (body) => request("POST", "/api/research", body),
+  savedResearch: (opportunity, agency) => request("GET", `/api/research?opportunity_id=${encodeURIComponent(opportunity)}&agency_id=${encodeURIComponent(agency)}`),
+  researchJob: (id) => request("GET", `/api/research/jobs/${encodeURIComponent(id)}`),
 };
 
 /** A notice attachment served through our server, so it can be shown in the page. */

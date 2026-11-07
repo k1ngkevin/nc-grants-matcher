@@ -4,7 +4,7 @@ WORKDIR /app/server
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . ./
-ENV DATA_DIR=/data
+ENV DATA_DIR=/data APP_ENV=production AUTH_MODE=entra
 RUN useradd -r -u 1001 app && mkdir -p /data && chown app /data
 USER app
 EXPOSE 8000

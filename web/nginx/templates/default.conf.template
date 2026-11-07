@@ -2,6 +2,14 @@ server {
     listen 80;
     root /usr/share/nginx/html;
 
+    # Public signup is rendered by FastAPI, not the staff React SPA.
+    location ~ ^/(subscribe|public-signup\.js|healthz)$ {
+        proxy_pass http://${API_UPSTREAM};
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     location /api/ {
         proxy_pass http://${API_UPSTREAM};   # api:8000 in docker compose; set API_UPSTREAM=localhost:8000 for an Azure sidecar
         proxy_set_header Host $host;

@@ -7,6 +7,16 @@ from fastapi import HTTPException, Request
 
 from . import db
 
+LIMIT_MESSAGES = {
+    "public-signup-ip": "Subscription signup limit reached for this connection (5 attempts per hour).",
+    "public-signup-email": "Confirmation email limit reached for this email address (3 per hour).",
+    "public-signup-global": "The service's hourly confirmation email limit has been reached.",
+    "expensive-api": "Search and preview limit reached (20 requests per minute).",
+    "test_digest": "Test email limit reached for this connection (5 per hour).",
+    "test-recipient": "Test email limit reached for this email address (3 per hour).",
+    "test-global": "The service's hourly test email limit has been reached.",
+}
+
 
 def subject_key(value: str) -> str:
     return hashlib.sha256(value.strip().lower().encode()).hexdigest()
@@ -30,7 +40,8 @@ def limit(bucket: str, subject: str, maximum: int, seconds: int):
         else:
             conn.execute("INSERT INTO api_rate_events VALUES(?,?,?)", (bucket, subject_key(subject), now))
     if blocked:
-        raise HTTPException(429, "Too many requests. Please try again later.", headers={"Retry-After": str(retry)})
+        message = LIMIT_MESSAGES.get(bucket, "Too many API requests.")
+        raise HTTPException(429, message, headers={"Retry-After": str(retry)})
 
 
 def client_ip(request: Request) -> str:
