@@ -13,9 +13,9 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
-from . import auth, config, db, emailer, evaluate, public_subscriptions, research, security
+from . import agenda, auth, config, db, emailer, evaluate, public_subscriptions, research, security
 from .agencies import AGENCIES, AGENCY_BY_ID
 from .ingest import pipeline
 from .matching import embeddings, explain
@@ -92,7 +92,7 @@ async def authenticate(request: Request, call_next):
         try:
             security.limit("api-global", "all", 600, 60)
             security.limit("api", security.client_ip(request), 120, 60)
-            if request.url.path in {"/api/search", "/api/export.csv", "/api/subscriptions/preview"}:
+            if request.url.path in {"/api/search", "/api/export.csv", "/api/subscriptions/preview", "/api/calendar", "/api/calendar.ics"}:
                 security.limit("expensive-api", security.client_ip(request), 20, 60)
         except HTTPException as exc:
             return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
@@ -557,6 +557,49 @@ def opportunity_document(opportunity_id: str, att_id: str):
         "X-Frame-Options": "SAMEORIGIN",
         "Content-Security-Policy": "frame-ancestors 'self'",
     })
+
+
+# ---------------- calendar ----------------
+
+class CalendarBody(BaseModel):
+    agency_id: str = Field(max_length=40)
+    include: list[Literal["pursue", "save", "recommended", "research"]] = ["pursue", "save", "research"]
+    filters: dict = Field(default_factory=dict)  # search filters for the "recommended" layer
+    recommended_limit: int = Field(15, ge=1, le=50)
+    opportunity_id: str = Field("", max_length=100)  # just this grant, whatever its status
+
+
+def _calendar(body: CalendarBody) -> dict:
+    _agency(body.agency_id)
+    filters = None
+    if "recommended" in body.include and not body.opportunity_id:
+        try:  # same validation as /api/search
+            filters = _filters(SearchBody(**{**body.filters, "agency_id": body.agency_id, "view": "recommended"}))
+        except ValidationError as e:
+            raise HTTPException(422, "; ".join(err["msg"] for err in e.errors()))
+    try:
+        return agenda.build(body.agency_id, body.include, filters, body.recommended_limit, body.opportunity_id)
+    except LookupError:
+        raise HTTPException(404, "Unknown opportunity")
+
+
+@app.post("/api/calendar")
+def calendar_events(body: CalendarBody):
+    """Deadlines for the grants an agency tracks, plus dated steps from saved research."""
+    return _calendar(body)
+
+
+@app.post("/api/calendar.ics")
+def calendar_ics(body: CalendarBody):
+    data = _calendar(body)
+    if body.opportunity_id:
+        title = next((e["opportunity"]["title"] for e in data["events"]), "grant")
+        name, file = f"{data['agency']['short']}: {title}", f"grant-{body.opportunity_id.replace(':', '-')}.ics"
+    else:
+        name, file = f"{data['agency']['short']} grant deadlines", f"grant-calendar-{body.agency_id}.ics"
+    file = "".join(c for c in file if c.isalnum() or c in "-_.")
+    return Response(agenda.to_ics(data, name), media_type="text/calendar; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{file}"'})
 
 
 @app.get("/api/metrics")
