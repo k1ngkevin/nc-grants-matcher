@@ -67,7 +67,7 @@ That's a quick live check with the first 100 records. Drop `--max` to load every
 | Human decides | throughout | Nothing is auto-applied. Scores are labeled as recommendations |
 | precision@10 | `app/evaluate.py`, `GET /api/metrics` | Computed from real Pursue/Save/Dismiss labels |
 | Export | "Download CSV" | Current view with scores and reasons |
-| Email alerts | `emailer.py` | Double opt-in, daily/weekly/biweekly/monthly, top 5–25, uses the filters set at signup, one-click unsubscribe, optional domain allow-list |
+| Email alerts | `emailer.py` | Double opt-in, daily/weekly/biweekly/monthly, presets or a custom count of 1–100 grants, ranked by match score using saved filters, optional domain allow-list. Production unsubscribe requires staff sign-in |
 
 The card preview separates mission/program relevance (70 possible points) from eligibility, timing and award size (30).
 The additive score and ranking stay the same. A **Good match** label needs a total of at least 50, at least 18/45 semantic points,
@@ -94,6 +94,26 @@ replaced on demand when those inputs change; existing rows do not need to be del
 See `.env.example` for every setting. Copy it to `.env` in the repo root and the server reads it on startup (real environment variables win). With Docker, use `--env-file`.
 
 **Deploy (Lane A):** push the image to Azure Container Registry, then run it on Azure Container Apps with one replica and an Azure Files volume mounted at `/data`. The daily ingest and email scheduler run inside the app. Put it behind Entra ID sign-in (Container Apps "Authentication") so only state staff can reach it.
+
+### Test a grant digest
+
+For production sender-domain verification and SPF/DKIM setup, follow
+[the email deliverability guide](docs/email-deliverability.md). DNS verification
+requires an approved domain and its DNS administrator.
+
+In the email signup panel, enter your email, select the grant count and filters,
+then click **Send me a test email**. It sends a one-time ranked digest without
+creating or changing a subscription. Production tests go only to the signed-in
+work email. Without SMTP or ACS configured, tests are saved to `server/data/outbox/`
+and the UI reports that they were not emailed. Use `.env.example` to configure
+your email provider; keep credentials in `.env`, never in source control.
+
+Select **Daily** under **How often** for daily subscriptions. After confirmation,
+the first digest is sent immediately; subsequent digests are scheduled for 12:00 UTC
+on the next day (7 AM Eastern standard time / 8 AM daylight time). The running
+server checks for due subscriptions every 15 minutes. No-match scheduled digests
+are skipped; the next send is still scheduled. Test emails include an empty-state
+message if no grants match.
 
 ### Staff sign-in and agency permissions
 

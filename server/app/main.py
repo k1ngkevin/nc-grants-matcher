@@ -179,7 +179,7 @@ class SubscribeBody(BaseModel):
     email: str = Field(max_length=254)
     agency_id: str
     frequency: str = Field("weekly", pattern="^(daily|weekly|biweekly|monthly)$")
-    top_n: int = Field(10, ge=3, le=25)
+    top_n: int = Field(10, ge=1, le=emailer.MAX_DIGEST_GRANTS, strict=True)
     filters: dict = {}
 
 
@@ -205,6 +205,7 @@ def meta(request: Request):
         "default_min_score": DEFAULT_MIN_SCORE,
         "email_enabled": config.EMAIL_ENABLED,
         "email_confirmation": config.REQUIRE_EMAIL_CONFIRMATION,
+        "max_digest_grants": emailer.MAX_DIGEST_GRANTS,
         "allowed_email_domains": config.ALLOWED_EMAIL_DOMAINS,
         "ai": {"embeddings": embeddings.active_backend(), "explanations": "azure-openai" if explain.available() else "rules"},
         "dismiss_reasons": DISMISS_REASONS,
@@ -381,12 +382,27 @@ def unsubscribe(token: str):
     return _page("You're unsubscribed", "You won't get any more grant alerts at this address.")
 
 
+@app.post("/api/subscriptions/test")
+def test_digest(body: SubscribeBody, request: Request):
+    rate_limit(request, "test_digest", 5)
+    _agency(body.agency_id)
+    err = emailer.valid_email(body.email)
+    if err:
+        raise HTTPException(400, err)
+    if config.AUTH_MODE != "development" and body.email.strip().lower() != request.state.identity.name.lower():
+        raise HTTPException(403, "Send test emails only to your signed-in work email.")
+    result = emailer.send_test_digest(body.email.strip(), body.agency_id, body.filters, body.top_n)
+    if result["delivery"].get("error"):
+        raise HTTPException(503, "The test email could not be sent. Check the email provider settings and try again.")
+    return result
+
+
 @app.post("/api/subscriptions/preview", response_class=HTMLResponse)
 def preview(body: SubscribeBody):
     _agency(body.agency_id)
     f = Filters.from_dict({**body.filters, "agency_id": body.agency_id, "view": "recommended", "sort": "score"})
     data = search(f, limit=body.top_n, with_llm=True)
-    fake = {"agency_id": body.agency_id, "token": "preview", "frequency": body.frequency}
+    fake = {"agency_id": body.agency_id, "token": "preview", "frequency": body.frequency, "top_n": body.top_n}
     return HTMLResponse(emailer.digest_html(fake, data))
 
 

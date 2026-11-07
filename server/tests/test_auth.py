@@ -61,6 +61,7 @@ def test_agency_picker_and_search_scoped(secured):
     ("/api/decisions", {"agency_id": "dhhs", "opportunity_id": "x", "action": "save"}),
     ("/api/subscriptions", {"agency_id": "dhhs", "email": "x@nc.gov"}),
     ("/api/subscriptions/preview", {"agency_id": "dhhs", "email": "x@nc.gov"}),
+    ("/api/subscriptions/test", {"agency_id": "dhhs", "email": "x@nc.gov"}),
     ("/api/agencies/dhhs/projects", {"title": "Test project", "description": "Test description"}),
     ("/api/agencies/dhhs/documents", {"title": "Test document", "content": "x" * 60}),
 ])
@@ -123,6 +124,15 @@ def test_platform_mapped_claim_names(secured):
     ]
     raw = base64.b64encode(json.dumps({"auth_typ": "aad", "claims": claims}).encode()).decode()
     assert secured.get("/api/meta", headers={"x-ms-client-principal": raw}).status_code == 200
+
+
+def test_test_email_only_to_signed_in_worker(secured, monkeypatch):
+    from app import emailer
+    monkeypatch.setattr(emailer, "send_test_digest", lambda *args: {"delivery": {"delivered": True}})
+    h = {**headers(), "x-ms-client-principal-name": "worker@nc.gov"}
+    body = {"email": "someone-else@nc.gov", "agency_id": "deq", "top_n": 5}
+    assert secured.post("/api/subscriptions/test", json=body, headers=h).status_code == 403
+    assert secured.post("/api/subscriptions/test", json={**body, "email": "worker@nc.gov"}, headers=h).status_code == 200
 
 
 def test_production_fails_closed(monkeypatch):

@@ -1,0 +1,3 @@
+# Optional dependencies for send_test_email.py; the application uses its existing transport.
+azure-communication-email>=1.1
+python-dotenv>=1.0
