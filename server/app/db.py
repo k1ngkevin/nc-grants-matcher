@@ -3,6 +3,7 @@
 The rest of the app writes SQLite-style SQL (`?` placeholders, `cur.lastrowid`, rows readable by
 index or column name). For Postgres, a thin wrapper below translates that, so call sites don't change.
 Stick to SQL both databases understand (e.g. INSERT ... ON CONFLICT, not INSERT OR REPLACE).
+`BEGIN IMMEDIATE` is the one SQLite statement translated (to a Postgres transaction lock).
 """
 import json
 import re
@@ -219,6 +220,10 @@ class _PgConnection:
         self._conn = conn
 
     def execute(self, sql: str, params=()):
+        if sql.strip().upper() == "BEGIN IMMEDIATE":
+            # SQLite's "take the write lock now". psycopg already opened a transaction, so take a
+            # transaction-wide lock instead; it's released at commit/rollback, like SQLite's.
+            sql = "SELECT pg_advisory_xact_lock(4243)"
         m = _INSERT_RE.match(sql)
         wants_id = bool(m and m.group(1).lower() in _SERIAL_TABLES and "RETURNING" not in sql.upper())
         if wants_id:

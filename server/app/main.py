@@ -9,13 +9,13 @@ from contextlib import asynccontextmanager
 from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import auth, config, db, emailer, evaluate, public_subscriptions, security
+from . import auth, config, db, emailer, evaluate, public_subscriptions, research, security
 from .agencies import AGENCIES, AGENCY_BY_ID
 from .ingest import pipeline
 from .matching import embeddings, explain
@@ -139,13 +139,15 @@ def rate_limit(request: Request, bucket: str, limit: int, per_seconds: int = 360
 async def security_headers(request: Request, call_next):
     resp = await call_next(request)
     resp.headers["X-Content-Type-Options"] = "nosniff"
-    resp.headers["X-Frame-Options"] = "DENY"
     resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     if "token" in request.query_params:
         resp.headers["Referrer-Policy"] = "no-referrer"
     if request.url.path.startswith("/api/"):
-        resp.headers["Cache-Control"] = "no-store"
-    resp.headers["Content-Security-Policy"] = (
+        # setdefault: the notice-PDF route sets its own caching (private, 1 day).
+        resp.headers.setdefault("Cache-Control", "no-store")
+    # setdefault: a route may set its own framing rules (the notice PDFs are shown in an iframe on this site).
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Content-Security-Policy", (
         "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; "
         "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"))
     return resp
