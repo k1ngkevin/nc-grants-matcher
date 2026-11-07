@@ -11,6 +11,7 @@ from .matching.score import rank
 from .normalize import TIMING_LABELS, grant_type
 
 TIMING_ORDER = ["urgent", "standard", "later", "forecasted"]
+DEFAULT_MIN_SCORE = 50
 
 
 @dataclass
@@ -22,7 +23,8 @@ class Filters:
     federal_agency: str = ""
     no_match_only: bool = False
     include_unknown_amount: bool = True
-    min_score: int = 0
+    min_score: int = DEFAULT_MIN_SCORE
+    include_lower_scores: bool = False
     sort: str = "score"            # score | deadline | amount
     view: str = "recommended"      # recommended | pursue | save | dismiss
 
@@ -83,6 +85,7 @@ def search(f: Filters, limit: int = 50, offset: int = 0, with_llm: bool = False)
     q_words = [w for w in f.q.lower().split() if w]
     counts = {"recommended": 0, "pursue": 0, "save": 0, "dismiss": 0}
     timing_counts, dept_counts = Counter(), Counter()
+    below_score_count = 0
     out = []
     for r in ranked:
         o, s = r["opportunity"], r["signals"]
@@ -97,7 +100,10 @@ def search(f: Filters, limit: int = 50, offset: int = 0, with_llm: bool = False)
         decision = status_by_opp.get(o["id"])
         bucket = decision["action"] if decision else "recommended"
         if bucket == "recommended" and r["score"] < f.min_score:
-            continue
+            if s["timing"] in f.timing:
+                below_score_count += 1
+            if not f.include_lower_scores:
+                continue
         counts[bucket] += 1
         if bucket != f.view:
             continue
@@ -127,6 +133,7 @@ def search(f: Filters, limit: int = 50, offset: int = 0, with_llm: bool = False)
         "agency": {k: agency[k] for k in ("id", "short", "name", "applicant")},
         "filters": f.to_dict(),
         "total": len(out),
+        "below_score_count": below_score_count,
         "results": page,
         "counts": counts,
         "facets": {

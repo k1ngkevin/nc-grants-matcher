@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, BookOpen, Check, Download, Loader2 } from "lucide-react";
 import { api, fmtDate, store } from "./api.js";
 import GrantCard from "./GrantCard.jsx";
+import ScoreFilter from "./ScoreFilter.jsx";
 import { EmailSignup, Filters, ImproveMatches } from "./Sidebar.jsx";
 import Glossary from "./Glossary.jsx";
 import AgencyPicker, { RidgeMark } from "./AgencyPicker.jsx";
@@ -15,7 +16,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const ALL_TIMING = ["urgent", "standard", "later", "forecasted"];
-const DEFAULT_MIN_SCORE = 40;
 const TABS = [
   ["recommended", "Recommended"],
   ["save", "Saved"],
@@ -23,15 +23,16 @@ const TABS = [
   ["dismiss", "Dismissed"],
 ];
 
-function defaultFilters(floor) {
+function defaultFilters(meta) {
   return {
-    min_award: floor,
+    min_award: meta.financial_floor,
     timing: ALL_TIMING,
     q: "",
     federal_agency: "",
     no_match_only: false,
     include_unknown_amount: true,
-    min_score: DEFAULT_MIN_SCORE,
+    min_score: meta.default_min_score,
+    include_lower_scores: false,
     sort: "score",
   };
 }
@@ -60,7 +61,17 @@ export default function App() {
     api.meta()
       .then((m) => {
         setMeta(m);
-        setFilters({ ...defaultFilters(m.financial_floor), ...store.get("filters", {}), q: "" });
+        const defaults = defaultFilters(m);
+        const saved = store.get("filters", {}) || {};
+        const savedScore = Number(saved.min_score);
+        setFilters({
+          ...defaults,
+          ...saved,
+          min_score: Number.isInteger(savedScore) && savedScore > 0 && savedScore <= 100 ? savedScore : defaults.min_score,
+          // Keep the previous "show weaker matches" preference while retaining a real threshold.
+          include_lower_scores: typeof saved.include_lower_scores === "boolean" ? saved.include_lower_scores : saved.min_score === 0,
+          q: "",
+        });
         if (agencyId && !m.agencies.some((a) => a.id === agencyId)) setAgencyId(null);
       })
       .catch((e) => setMetaError(e.message));
@@ -125,6 +136,12 @@ export default function App() {
     a.download = `grants-${agencyId}-${view}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
+  };
+
+  const changeFilters = (next) => {
+    setFilters(next);
+    setLimit(25);
+    setFocusOpp(null);
   };
 
   const goHome = () => {
@@ -209,9 +226,8 @@ export default function App() {
               meta={meta}
               filters={filters}
               facets={data?.facets}
-              onChange={(f) => { setFilters(f); setLimit(25); setFocusOpp(null); }}
-              onReset={() => setFilters(defaultFilters(meta.financial_floor))}
-              defaultMinScore={DEFAULT_MIN_SCORE}
+              onChange={changeFilters}
+              onReset={() => changeFilters(defaultFilters(meta))}
             />
             <EmailSignup meta={meta} agency={agency} filters={{ ...filters, q: debouncedQ }} />
             <ImproveMatches agency={agency} onChanged={load} />
@@ -228,6 +244,10 @@ export default function App() {
                 ))}
               </TabsList>
             </Tabs>
+
+            {view === "recommended" && !focusOpp && (
+              <ScoreFilter filters={filters} onChange={changeFilters} belowScoreCount={loading ? null : data?.below_score_count} />
+            )}
 
             <div className="flex flex-wrap items-center justify-between gap-3 py-4">
               <div className="text-[15px]">{data ? <Summary data={data} view={view} agency={agency} /> : " "}</div>
@@ -267,7 +287,7 @@ export default function App() {
             )}
 
             {data && data.results.length === 0 && !loading && (
-              <EmptyState view={view} filters={filters} setFilters={setFilters} agency={agency} />
+              <EmptyState view={view} filters={filters} setFilters={changeFilters} agency={agency} />
             )}
 
             <div className={`flex flex-col gap-3 transition-opacity ${loading ? "opacity-55" : ""}`}>
@@ -328,12 +348,14 @@ function EmptyState({ view, filters, setFilters, agency }) {
   }
   return (
     <Card className="items-center gap-3 py-10 text-center">
-      <p className="font-semibold">No strong matches for {agency.short} with these filters</p>
+      <p className="font-semibold">No grants for {agency.short} with these filters</p>
       <p className="max-w-md text-sm text-muted-foreground">
-        Widen the filters or include weaker matches. Adding your active projects under "Improve your matches" also sharpens the results.
+        Widen the filters or include lower scores. Adding your active projects under "Improve your matches" also sharpens the results.
       </p>
       <div className="flex gap-2">
-        {filters.min_score > 0 && <Button onClick={() => setFilters({ ...filters, min_score: 0 })}>Show weaker matches</Button>}
+        {!filters.include_lower_scores && filters.min_score > 0 && (
+          <Button onClick={() => setFilters({ ...filters, include_lower_scores: true })}>Include scores below {filters.min_score}</Button>
+        )}
         {filters.q && <Button variant="outline" onClick={() => setFilters({ ...filters, q: "" })}>Clear search</Button>}
       </div>
     </Card>

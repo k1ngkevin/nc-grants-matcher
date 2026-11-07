@@ -4,6 +4,11 @@ A simple website for North Carolina state agencies. Pick your agency and you get
 
 It covers 30 NC agencies: cabinet departments, Council of State offices, commissions, the UNC System and the Community College System.
 
+Recommendations default to scores of **50 and above**. Use **Minimum score** above the results to change the cutoff,
+or toggle **Include lower scores** to see all scores while keeping your chosen cutoff. The page shows how many lower-scoring
+grants are hidden. Your preferences are remembered in this browser; **Reset** restores 50+. Saved, Pursuing and Dismissed grants
+remain visible regardless of score. CSV exports and new email subscriptions use the selected score settings.
+
 ![Results page for DNCR (sample data)](docs/screenshot.png)
 
 ```

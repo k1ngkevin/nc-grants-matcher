@@ -21,7 +21,7 @@ from .ingest import pipeline
 from .matching import embeddings, explain
 from .matching.score import DISMISS_REASONS, WEIGHTS
 from .normalize import CATEGORY_LABELS, INSTRUMENT_LABELS, TIMING_LABELS
-from .search import Filters, search
+from .search import DEFAULT_MIN_SCORE, Filters, search
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("app")
@@ -123,7 +123,8 @@ class SearchBody(BaseModel):
     federal_agency: str = Field("", max_length=40)
     no_match_only: bool = False
     include_unknown_amount: bool = True
-    min_score: int = Field(0, ge=0, le=100)
+    min_score: int = Field(DEFAULT_MIN_SCORE, ge=0, le=100)
+    include_lower_scores: bool = False
     sort: str = Field("score", pattern="^(score|deadline|amount)$")
     view: str = Field("recommended", pattern="^(recommended|pursue|save|dismiss)$")
     limit: int = Field(25, ge=1, le=200)
@@ -176,6 +177,7 @@ def meta():
         "opportunity_count": n[0],
         "sample_data": bool(n[1]),
         "financial_floor": config.FINANCIAL_FLOOR,
+        "default_min_score": DEFAULT_MIN_SCORE,
         "email_enabled": config.EMAIL_ENABLED,
         "email_confirmation": config.REQUIRE_EMAIL_CONFIRMATION,
         "allowed_email_domains": config.ALLOWED_EMAIL_DOMAINS,
@@ -229,7 +231,7 @@ def decide(body: DecisionBody, request: Request):
             raise HTTPException(400, err)
         match = None
         for view in ("recommended", "save", "pursue", "dismiss"):
-            data = search(Filters.from_dict({"agency_id": body.agency_id, "view": view}), limit=1000)
+            data = search(Filters.from_dict({"agency_id": body.agency_id, "view": view, "include_lower_scores": True}), limit=1000)
             match = next((r for r in data["results"] if r["opportunity"]["id"] == body.opportunity_id), None)
             if match:
                 break

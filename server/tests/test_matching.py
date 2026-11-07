@@ -51,7 +51,7 @@ def test_feedback_cannot_make_a_weak_relevance_match_strong():
 
 
 def test_search_preview_keeps_the_numeric_breakdown(matching_db):
-    rows = search(Filters(agency_id="dit"), limit=200)["results"]
+    rows = search(Filters(agency_id="dit", min_score=0), limit=200)["results"]
     assert rows
     for r in rows:
         assert r["score"] == max(0, min(100, round(sum(r["breakdown"].values()))))

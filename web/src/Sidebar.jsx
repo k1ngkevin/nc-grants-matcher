@@ -36,7 +36,7 @@ function CheckRow({ id, checked, onChange, children, count }) {
   );
 }
 
-export function Filters({ meta, filters, facets, onChange, onReset, defaultMinScore }) {
+export function Filters({ meta, filters, facets, onChange, onReset }) {
   const set = (patch) => onChange({ ...filters, ...patch });
   const toggleTiming = (t) => {
     const next = filters.timing.includes(t) ? filters.timing.filter((x) => x !== t) : [...filters.timing, t];
@@ -103,7 +103,6 @@ export function Filters({ meta, filters, facets, onChange, onReset, defaultMinSc
           <legend className="mb-1 text-[13px] font-medium text-muted-foreground">More options</legend>
           <CheckRow id="opt-nomatch" checked={filters.no_match_only} onChange={(v) => set({ no_match_only: v })}>No matching funds required</CheckRow>
           <CheckRow id="opt-unknown" checked={filters.include_unknown_amount} onChange={(v) => set({ include_unknown_amount: v })}>Include grants with no amount listed</CheckRow>
-          <CheckRow id="opt-weak" checked={filters.min_score === 0} onChange={(v) => set({ min_score: v ? 0 : defaultMinScore })}>Show weaker matches too</CheckRow>
         </fieldset>
       </CardContent>
     </Card>

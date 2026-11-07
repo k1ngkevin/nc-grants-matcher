@@ -62,6 +62,69 @@ def test_filters(client):
     assert top(client, "deq", q="pfas")["total"] == 1
 
 
+def test_score_threshold_defaults_toggle_and_boundary(client):
+    all_results = top(client, "dit", limit=200)["results"]
+    assert any(r["score"] < 50 for r in all_results)
+    defaults = client.post("/api/search", json={"agency_id": "dit", "limit": 200}).json()
+    assert defaults["filters"]["min_score"] == client.get("/api/meta").json()["default_min_score"] == 50
+    assert defaults["filters"]["include_lower_scores"] is False
+    assert [r["opportunity"]["id"] for r in defaults["results"]] == [
+        r["opportunity"]["id"] for r in all_results if r["score"] >= 50]
+    assert defaults["below_score_count"] == sum(r["score"] < 50 for r in all_results)
+
+    # Include the exact boundary score; toggling lower scores on/off preserves the threshold.
+    threshold = all_results[0]["score"]
+    strict = top(client, "dit", min_score=threshold, limit=200)
+    expanded = top(client, "dit", min_score=threshold, include_lower_scores=True, limit=200)
+    restored = top(client, "dit", min_score=threshold, include_lower_scores=False, limit=200)
+    assert strict["results"] and strict["results"] == restored["results"]
+    assert strict["results"][0]["score"] == threshold
+    assert expanded["results"] == all_results
+    assert expanded["filters"]["min_score"] == threshold
+    assert strict["below_score_count"] == expanded["below_score_count"] == len(all_results) - strict["total"]
+
+
+def test_score_toggle_preserves_other_filters_and_csv(client):
+    body = {"agency_id": "dit", "min_score": 100, "include_lower_scores": True,
+            "q": "broadband", "timing": ["standard", "later", "forecasted"], "limit": 200}
+    expanded = client.post("/api/search", json=body).json()
+    expected = client.post("/api/search", json={**body, "min_score": 0, "include_lower_scores": False}).json()
+    assert expanded["results"] and expanded["results"] == expected["results"]
+    assert expanded["below_score_count"] == sum(r["score"] < 100 for r in expanded["results"])
+    csv = client.post("/api/export.csv", json=body)
+    assert csv.status_code == 200
+    assert all(r["opportunity"]["title"] in csv.text for r in expanded["results"])
+
+
+@pytest.mark.parametrize("action", ["save", "pursue", "dismiss"])
+def test_score_cutoff_keeps_tracked_grants_visible(client, action):
+    low = top(client, "dit", limit=200)["results"][-1]
+    oid = low["opportunity"]["id"]
+    assert low["score"] < 50
+    payload = {"agency_id": "dit", "opportunity_id": oid, "action": action}
+    if action == "dismiss":
+        payload["reason"] = "not_relevant"
+    try:
+        assert client.post("/api/decisions", json=payload).status_code == 200
+        tracked = top(client, "dit", min_score=100, view=action, limit=200)
+        assert any(r["opportunity"]["id"] == oid for r in tracked["results"])
+    finally:
+        client.post("/api/decisions", json={**payload, "action": "undo"})
+
+
+def test_lower_score_grant_can_still_be_routed_to_team(client):
+    low = top(client, "dit", limit=200)["results"][-1]
+    oid = low["opportunity"]["id"]
+    assert low["score"] < 50
+    try:
+        response = client.post("/api/decisions", json={"agency_id": "dit", "opportunity_id": oid,
+                                                     "action": "pursue", "route_to": "grants@dit.nc.gov"})
+        assert response.status_code == 200
+        assert response.json()["routed"]["outbox_file"]
+    finally:
+        client.post("/api/decisions", json={"agency_id": "dit", "opportunity_id": oid, "action": "undo"})
+
+
 def test_project_boosts_match(client):
     before = {r["opportunity"]["id"]: r["score"] for r in top(client, "dncr", limit=200)["results"]}
     client.post("/api/agencies/dncr/projects", json={
