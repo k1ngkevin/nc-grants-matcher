@@ -9,6 +9,7 @@ import { EmailSignup, Filters, ImproveMatches } from "./Sidebar.jsx";
 import Glossary from "./Glossary.jsx";
 import AgencyPicker, { BridgeMark } from "./AgencyPicker.jsx";
 import ContourField from "./ContourField.jsx";
+import StateSurvey, { TrailLoader } from "./StateSurvey.jsx";
 import FeedbackDialog from "./FeedbackDialog.jsx";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -194,7 +195,7 @@ export default function App() {
     return (
       <Backdrop>
         <p className="flex items-center gap-2 text-sm text-fog/80">
-          <Loader2 className="size-4 animate-spin motion-reduce:[animation-duration:2s]" /> Loading open grants
+          <TrailLoader tone="fog" /> Loading open grants
         </p>
       </Backdrop>
     );
@@ -219,6 +220,7 @@ export default function App() {
           <header className="topo-sky relative isolate overflow-hidden text-fog">
             <div className="survey-grid absolute inset-0 -z-10" aria-hidden="true" />
             <ContourField className="-z-10 opacity-45 [mask-image:linear-gradient(to_right,rgb(0_0_0/0.3)_20%,black_75%)]" />
+            <StateSurvey labels={false} className="absolute top-12 right-[-1%] -z-10 hidden w-[38%] max-w-[640px] opacity-45 md:block" />
             {topBar}
             <div className="mx-auto max-w-7xl px-4 pt-8 sm:px-6 sm:pt-12">
               <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-6">
@@ -455,7 +457,8 @@ function Landing({ meta, topBar, onPick }) {
     <main className="flex flex-1 flex-col">
       <section className="topo-sky relative isolate flex min-h-[92svh] flex-col overflow-hidden text-fog">
         <div className="survey-grid absolute inset-0 -z-10" aria-hidden="true" />
-        <ContourField draw className="-z-10 [mask-image:linear-gradient(to_right,rgb(0_0_0/0.35)_15%,black_65%)]" />
+        <ContourField draw className="-z-10 opacity-50 [mask-image:linear-gradient(to_right,rgb(0_0_0/0.3)_15%,black_65%)]" />
+        <StateSurvey draw className="absolute right-0 bottom-[13vh] -z-10 hidden w-[46vw] max-w-[1000px] lg:block" />
         {topBar}
 
         <motion.div className="mx-auto flex w-full max-w-7xl flex-1 flex-col justify-center px-4 pt-10 pb-40 sm:px-6"
@@ -484,6 +487,9 @@ function Landing({ meta, topBar, onPick }) {
               </p>
             )}
           </motion.form>
+
+          {/* Below lg the survey gets its own space under the form instead of sitting behind the text. */}
+          <StateSurvey draw labels={false} className="mt-12 -mr-6 w-[calc(100%+1.5rem)] max-w-2xl lg:hidden" />
         </motion.div>
 
         <RidgeEdge />

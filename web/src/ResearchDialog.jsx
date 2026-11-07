@@ -15,6 +15,7 @@ import { api, documentUrl, downloadGrantCalendar, fmtDate } from "./api.js";
 import ContourField from "./ContourField.jsx";
 import AskPanel from "./AskPanel.jsx";
 import EffortMatch from "./EffortMatch.jsx";
+import { TrailLoader } from "./StateSurvey.jsx";
 import Explained, { GlossaryContext } from "./Explained.jsx";
 import { buildGlossary, findTerms } from "./grantTerms.js";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -373,7 +374,7 @@ function Running({ phase, started }) {
       <div className="max-w-md" role="status" aria-live="polite">
         <p className="display-light text-4xl text-pine">Reading the notice</p>
         <p className="mt-4 flex items-center gap-2 font-extrabold text-pine">
-          <Loader2 className="size-4 shrink-0 animate-spin motion-reduce:[animation-duration:2s]" />{" "}
+          <TrailLoader className="shrink-0" />{" "}
           {phase}
         </p>
         <p className="mt-1 font-mono text-[12px] text-muted-foreground tabular-nums">

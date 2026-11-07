@@ -5,6 +5,7 @@ import { api, documentUrl } from "./api.js";
 import ContourField from "./ContourField.jsx";
 import Explained, { GlossaryContext } from "./Explained.jsx";
 import { buildGlossary } from "./grantTerms.js";
+import { TrailLoader } from "./StateSurvey.jsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -98,7 +99,7 @@ export default function AskPanel({ opportunity: o, agency, onCite, className }) 
               </AnimatePresence>
               {busy && (
                 <li className="flex items-center gap-2 text-[14px] text-muted-foreground" role="status">
-                  <Loader2 className="size-4 animate-spin motion-reduce:[animation-duration:2s]" />
+                  <TrailLoader />
                   Reading the notice{turns.length <= 1 ? ". The first question can take up to a minute while the documents download." : "…"}
                 </li>
               )}

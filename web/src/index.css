@@ -140,3 +140,9 @@
   font-weight: 200;
   font-variation-settings: "opsz" 144, "SOFT" 100;
 }
+
+/* Trail-blaze loader: each blaze is painted on, holds, then fades as the next one appears. */
+@keyframes blaze-step {
+  0%, 100% { opacity: 0.2; transform: translateY(2px); }
+  35%, 60% { opacity: 1; transform: translateY(0); }
+}
