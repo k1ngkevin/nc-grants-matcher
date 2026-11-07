@@ -13,6 +13,8 @@ from urllib.parse import quote
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from . import config, db, emailer, evaluate, research
@@ -365,6 +367,67 @@ def preview(body: SubscribeBody):
     data = search(f, limit=body.top_n, with_llm=True)
     fake = {"agency_id": body.agency_id, "token": "preview", "frequency": body.frequency}
     return HTMLResponse(emailer.digest_html(fake, data))
+
+
+# ---------------- feedback ----------------
+
+FEEDBACK_KINDS = {"problem": "Something's wrong", "idea": "Idea", "scoring": "Score looks off", "other": "Other"}
+
+
+class FeedbackBody(BaseModel):
+    kind: Literal["problem", "idea", "scoring", "other"]
+    message: str = Field(..., min_length=5, max_length=4000)
+    email: str = Field("", max_length=254)
+    agency_id: str = Field("", max_length=40)
+    opportunity_id: str = Field("", max_length=100)
+    page: str = Field("", max_length=40)
+
+
+def _feedback_email(fid: int, body: FeedbackBody) -> None:
+    e = html.escape
+    agency = AGENCY_BY_ID.get(body.agency_id, {}).get("name", "")
+    title = ""
+    if body.opportunity_id:
+        with db.session() as conn:
+            row = conn.execute("SELECT title FROM opportunities WHERE id=?", (body.opportunity_id,)).fetchone()
+        title = row["title"] if row else body.opportunity_id
+    inner = (f"<p><b>{e(FEEDBACK_KINDS[body.kind])}</b>{' from ' + e(agency) if agency else ''}</p>"
+             f"<p style='white-space:pre-wrap'>{e(body.message)}</p>"
+             + (f"<p>Grant: {e(title)}</p>" if title else "")
+             + (f"<p>Reply to: {e(body.email)}</p>" if body.email else "<p>No reply address given.</p>")
+             + f"<p style='color:#666'>Feedback #{fid}, page: {e(body.page or 'unknown')}</p>")
+    emailer.send(config.FEEDBACK_EMAIL, f"[Feedback] {FEEDBACK_KINDS[body.kind]}{': ' + agency if agency else ''}",
+                 emailer._shell("New feedback", inner))
+
+
+@app.post("/api/feedback")
+def send_feedback(body: FeedbackBody, request: Request):
+    rate_limit(request, "feedback", 10)
+    email = body.email.strip()
+    if email and not emailer.EMAIL_RE.match(email):
+        raise HTTPException(400, "Enter a valid email address, or leave it blank.")
+    if body.agency_id and body.agency_id not in AGENCY_BY_ID:
+        raise HTTPException(400, "Unknown agency")
+    with db.session() as conn:
+        fid = conn.execute(
+            "INSERT INTO feedback(kind, message, email, agency_id, opportunity_id, page) VALUES(?,?,?,?,?,?)",
+            (body.kind, body.message.strip(), email or None, body.agency_id or None,
+             body.opportunity_id or None, body.page or None)).lastrowid
+    if config.FEEDBACK_EMAIL:  # don't make the person wait on the mail server
+        threading.Thread(target=_feedback_email, args=(fid, body), daemon=True).start()
+    return {"ok": True, "id": fid}
+
+
+@app.get("/api/admin/feedback")
+def list_feedback(request: Request, limit: int = 200):
+    if not ADMIN_TOKEN or request.headers.get("x-admin-token") != ADMIN_TOKEN:
+        raise HTTPException(403, "Set ADMIN_TOKEN and send it in the X-Admin-Token header")
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT f.*, o.title AS opportunity_title FROM feedback f
+               LEFT JOIN opportunities o ON o.id = f.opportunity_id
+               ORDER BY f.id DESC LIMIT ?""", (max(1, min(limit, 1000)),)).fetchall()
+    return [dict(r) for r in rows]
 
 
 # ---------------- in-depth research ----------------

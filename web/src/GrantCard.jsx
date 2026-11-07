@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ExternalLink, FileSearch } from "lucide-react";
+import { ChevronDown, ExternalLink, FileSearch, Flag } from "lucide-react";
 import { fmtDate, money, store } from "./api.js";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -99,7 +99,7 @@ function Chip({ className, help, children }) {
   );
 }
 
-export default function GrantCard({ result: r, view, agency, meta, onDecide, startExpanded }) {
+export default function GrantCard({ result: r, view, agency, meta, onDecide, startExpanded, onFeedback }) {
   const o = r.opportunity, s = r.signals, g = r.grant_type;
   const [expanded, setExpanded] = useState(!!startExpanded);
   const [panel, setPanel] = useState(null); // "pursue" | "dismiss" | null
@@ -312,11 +312,18 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
                 {o.description && (
                   <p className="mt-4 max-w-[75ch] text-sm text-foreground/85">{o.description.length > 900 ? o.description.slice(0, 900) + "…" : o.description}</p>
                 )}
-                <Button asChild variant="outline" size="sm" className="mt-4">
+                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+                <Button asChild variant="outline" size="sm">
                   <a href={o.url} target="_blank" rel="noopener noreferrer">
                     Open full announcement on {o.source === "sample" ? "Grants.gov (sample link)" : "Grants.gov"} <ExternalLink />
                   </a>
                 </Button>
+                  {onFeedback && (
+                    <Button variant="link" size="sm" className="h-auto p-0 text-muted-foreground hover:text-pine" onClick={onFeedback}>
+                      <Flag /> Report a problem with this grant
+                    </Button>
+                  )}
+                </div>
               </div>
             </CollapsibleContent>
           </Collapsible>

@@ -189,5 +189,6 @@ def llm_rationale(agency: dict, result: dict, projects: list[dict]) -> str | Non
                   CHAT_COOLDOWN_SECONDS // 60, e)
         return None
     with db.session() as conn:
-        conn.execute("INSERT OR REPLACE INTO explanations(cache_key, text) VALUES(?, ?)", (key, text))
+        conn.execute("INSERT INTO explanations(cache_key, text) VALUES(?, ?) "
+                     "ON CONFLICT(cache_key) DO UPDATE SET text=excluded.text", (key, text))
     return text

@@ -32,6 +32,7 @@ export const api = {
   deleteDocument: (agency, id) => request("DELETE", `/api/agencies/${agency}/documents/${id}`),
   subscribe: (body) => request("POST", "/api/subscriptions", body),
   previewEmail: (body) => request("POST", "/api/subscriptions/preview", body),
+  sendFeedback: (body) => request("POST", "/api/feedback", body),
   startResearch: (body) => request("POST", "/api/research", body),
   researchJob: (id) => request("GET", `/api/research/jobs/${id}`),
   savedResearch: (opp, agency) => request("GET", `/api/research?opportunity_id=${encodeURIComponent(opp)}&agency_id=${encodeURIComponent(agency)}`),

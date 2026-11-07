@@ -23,35 +23,66 @@ USAspending ┘                       │ < $50K ✗     │   │ 25 program fi
                                                        └─────────────────┘
 ```
 
-## Run it (about 2 minutes)
+## Run it
 
-You need Python 3.11+ and Node 18+.
+There are two ways to run it. Both serve the site at http://localhost:8000, so only one can run at a time.
+
+| | What runs | Database | Use it for |
+|---|---|---|---|
+| **A. Docker Compose** (recommended) | 3 containers: `db`, `api`, `web` | PostgreSQL | Running the app, deploying |
+| **B. No Docker** | `uvicorn` on your machine | SQLite file | Developing and running tests |
+
+The database is chosen by `DATABASE_URL`: set it to a `postgresql://` URL for PostgreSQL, leave it empty for SQLite. Compose sets it for you.
+
+On first start the database is empty, so it loads a clearly labeled **SAMPLE dataset** (yellow "Demo mode" banner, "SAMPLE" tag on each card). Load live data with the ingest command shown for each option. `--max 100` is a quick check with the first 100 records; drop it to load everything (a few minutes), and live data replaces the sample set. After that the server re-ingests every day at 6:07 server time.
+
+### A. Docker Compose (three services)
+
+You need Docker. Copy `.env.example` to `.env` (optional; everything has a default).
+
+```bash
+./redeploy.sh                                                 # build and start db, api, web; waits until the site is up
+docker compose exec api python -m app.ingest --max 100        # load live data
+```
+
+`./redeploy.sh` is `docker compose up -d --build` plus a wait for the site (and it removes the container from the old single-container setup if it's still around). `./redeploy.sh --env` restarts only the api after you edit `.env`.
+
+Open http://localhost:8000.
+
+| Service | Image | What it does |
+|---|---|---|
+| `db` | `postgres:17-alpine` | Stores everything in the `pgdata` volume. Not exposed outside Docker. |
+| `api` | `server/Dockerfile` | FastAPI, the daily ingest scheduler and email digests. Reads `.env`. Not exposed outside Docker. |
+| `web` | `web/Dockerfile` | nginx serving the built React site, forwarding `/api/*` to `api`. Published on port 8000. |
+
+Everyday commands:
+
+```bash
+docker compose up --build -d     # rebuild after code changes (only changed services restart)
+./redeploy.sh --env             # pick up .env changes (no rebuild)
+docker compose logs -f api       # follow the API logs
+docker compose ps                # what's running
+docker compose down              # stop (data is kept)
+docker compose down -v           # stop and delete the database (starts over with SAMPLE data)
+docker compose exec db psql -U matchmaker matchmaker   # SQL shell
+```
+
+Set `WEB_PORT=8080` (in your shell or `.env`) to publish on a different port, and `POSTGRES_PASSWORD` to change the database password before the first start.
+
+### B. No Docker
+
+You need Python 3.11+ and Node 18+. Run each line from the repo root.
 
 ```bash
 cd server && pip install -r requirements.txt
-```
-
-```bash
 cd web && npm install && npm run build
-```
-
-```bash
 cd server && uvicorn app.main:app --port 8000
+cd server && python -m app.ingest --max 100        # load live data
 ```
-
-Open http://localhost:8000. On first start the database is empty, so it loads a clearly labeled **SAMPLE dataset** (yellow "Demo mode" banner, "SAMPLE" tag on each card). Then load live data:
-
-```bash
-cd server && python -m app.ingest --max 100
-```
-
-That's a quick live check with the first 100 records. Drop `--max` to load everything (a few minutes), and live data replaces the sample set. After that the server re-ingests every day at 6:07 server time.
 
 **Developing the UI:** run the API with `uvicorn app.main:app --reload --port 8000`, then `cd web && npm run dev` and open http://localhost:5173 (calls to `/api` are proxied).
 
-**Tests:** `cd server && python -m pytest -q` (33 tests: guardrails, ranking, triage, email, export).
-
-**Docker:** `docker build -t matchmaker .` then `docker run -p 8000:8000 --env-file .env -v matchmaker-data:/data matchmaker`
+**Tests:** `cd server && python -m pytest -q` (79 tests: guardrails, ranking, triage, email, export, research, feedback). They use a temporary SQLite database.
 
 ## How it meets the blueprint
 
@@ -93,13 +124,15 @@ replaced on demand when those inputs change; existing rows do not need to be del
 | `SMTP_*` | Real email through SendGrid, Azure Communication Services (being retired September 30, 2028) or any SMTP relay. Microsoft is retiring password sign-in for SMTP in Exchange Online, so check with IT before using an Office 365 mailbox. Without it, emails go to `server/data/outbox/`. Test the settings with `cd server && python -m app.emailer you@agency.nc.gov` |
 | `SAM_API_KEY` | SAM.gov program descriptions are added to the matching text |
 
-See `.env.example` for every setting. Copy it to `.env` in the repo root and the server reads it on startup (real environment variables win). With Docker, use `--env-file`.
+See `.env.example` for every setting. Copy it to `.env` in the repo root and the server reads it on startup (real environment variables win). Docker Compose passes it to the `api` service.
 
-**Deploy the current SQLite version:** run the Docker container on an Azure Linux VM, with `/data` on the VM's persistent OS or managed data disk. Keep one application container: the scheduler and active research jobs run inside that process. Put an HTTPS reverse proxy in front of it. For Azure Container Apps or App Service, migrate the database to PostgreSQL first; the current SQLite WAL database must not live on a network file share. See [Azure deployment notes](docs/azure-deployment.md) for storage, access and migration requirements.
+**Deploy with Docker Compose:** on an Azure Linux VM, `docker compose up -d` runs all three services, with PostgreSQL's data in the `pgdata` volume on the VM's disk. Put an HTTPS reverse proxy in front of `web`. Run one `api` container: the scheduler and active research jobs run inside that process. For a managed database, point `DATABASE_URL` at Azure Database for PostgreSQL and drop the `db` service.
+
+For Azure Container Apps or App Service, use Azure Database for PostgreSQL through `DATABASE_URL`. See [Azure deployment notes](docs/azure-deployment.md).
 
 ## Team lanes: what's done and what's next
 
-- **Lane A, Cloud & Ops.** Done: Dockerfile, env-based config, in-app daily scheduler. Next: create the Azure resource group, Container Registry, Container App, Azure OpenAI deployments and Entra ID auth. For production, move SQLite → Azure Database for PostgreSQL and the in-memory vector index → Azure AI Search (same inputs/outputs; see `matching/embeddings.py`).
+- **Lane A, Cloud & Ops.** Done: Docker Compose (PostgreSQL, API, nginx web), env-based config, in-app daily scheduler. Next: create the Azure resource group, Container Registry, Container App, Azure OpenAI deployments and Entra ID auth. For production, point `DATABASE_URL` at Azure Database for PostgreSQL and move the in-memory vector index → Azure AI Search (same inputs/outputs; see `matching/embeddings.py`).
 - **Lane B, Data & Ingestion.** Done: Grants.gov, USAspending and SAM.gov connectors, normalization, and 30 agency profiles in `server/app/agencies.py`. Next: **run the live ingest and check the parsed fields** (see the caveats below), have each agency confirm its mission summary and typical programs (Assistance Listing prefixes), and load real strategic plans.
 - **Lane C, Matching & AI.** Done: blended scoring, feedback loop, explanation prompt, precision@10. Next: label 20–30 grants for 3–4 agencies, run `python -m app.evaluate`, then tune `WEIGHTS` / `CALIBRATION`.
 - **Lane D, App & Story.** Done: the site, triage, CSV, email signup and preview, glossary. Next: the pitch (outline below) and a usability check with a real grants coordinator.

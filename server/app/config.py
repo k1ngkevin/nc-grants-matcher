@@ -15,6 +15,9 @@ if ENV_FILE:
 DATA_DIR = Path(os.getenv("DATA_DIR", ROOT / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = Path(os.getenv("DB_PATH", DATA_DIR / "matchmaker.db"))
+# postgresql://user:pass@host:5432/dbname uses PostgreSQL (docker compose sets this);
+# empty keeps the SQLite file at DB_PATH.
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 OUTBOX_DIR = DATA_DIR / "outbox"
 WEB_DIST = Path(os.getenv("WEB_DIST", ROOT.parent / "web" / "dist"))
 
@@ -57,6 +60,10 @@ EMAIL_ENABLED = bool(SMTP_HOST or ACS_CONNECTION_STRING)
 ALLOWED_EMAIL_DOMAINS = [d.strip().lower() for d in os.getenv("ALLOWED_EMAIL_DOMAINS", "").split(",") if d.strip()]
 # Double opt-in: a subscription only becomes active after the link in the confirmation email is clicked.
 REQUIRE_EMAIL_CONFIRMATION = os.getenv("REQUIRE_EMAIL_CONFIRMATION", "true").lower() == "true"
+
+# Where new feedback from the site is emailed (optional). It's always saved in the database;
+# read it with GET /api/admin/feedback and the X-Admin-Token header.
+FEEDBACK_EMAIL = os.getenv("FEEDBACK_EMAIL", "").strip()
 
 # ---- Scheduling ----
 RUN_SCHEDULER = os.getenv("RUN_SCHEDULER", "true").lower() == "true"

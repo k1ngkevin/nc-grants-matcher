@@ -132,7 +132,8 @@ def test_cached_question_objects_are_repaired_without_another_ai_call(fake, clie
     opp_id = _opp_id()
     saved = {**AI_ANSWER, "questions": [str(structured), structured]}
     with db.session() as conn:
-        conn.execute("INSERT OR REPLACE INTO research(opportunity_id, agency_id, result, created_at) VALUES (?, ?, ?, ?)",
+        conn.execute("INSERT INTO research(opportunity_id, agency_id, result, created_at) VALUES (?, ?, ?, ?) "
+                     "ON CONFLICT(opportunity_id, agency_id) DO UPDATE SET result=excluded.result, created_at=excluded.created_at",
                      (opp_id, "osfm", json.dumps(saved), "2026-11-07T12:00:00+00:00"))
     result = client.get("/api/research", params={"opportunity_id": opp_id, "agency_id": "osfm"}).json()
     assert result["result"]["questions"] == [question, question]
