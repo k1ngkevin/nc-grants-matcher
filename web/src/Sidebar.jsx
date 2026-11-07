@@ -15,9 +15,9 @@ import { cn } from "@/lib/utils";
 
 const TIMING = [
   ["urgent", "Closes within 14 days", "bg-urgent"],
-  ["standard", "Closes in 15–60 days", "bg-soon"],
-  ["later", "Closes in 60+ days", "bg-haze"],
-  ["forecasted", "Forecast (coming soon)", "bg-forecast"],
+  ["standard", "Closes in 15–60 days", "bg-pine"],
+  ["later", "Closes in 60+ days", "bg-pine-300"],
+  ["forecasted", "Forecast (coming soon)", "border border-dashed border-pine-500"],
 ];
 const AWARD_OPTIONS = [50_000, 100_000, 250_000, 1_000_000, 5_000_000];
 const ALL_DEPTS = "__all";
@@ -145,9 +145,9 @@ export function EmailSignup({ meta, agency, filters }) {
   if (state.status === "done") {
     const r = state.res;
     return (
-      <Card className="gap-3 border-t-4 border-t-soon py-4">
+      <Card className="gap-3 border-t-4 border-t-pine py-4">
         <CardHeader className="px-4">
-          <CardTitle className="flex items-center gap-2 text-soon"><CheckCircle2 className="size-5" /> Subscribed</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-pine"><CheckCircle2 className="size-5" /> Subscribed</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 px-4 text-sm">
           {r.confirmed ? (
@@ -171,9 +171,9 @@ export function EmailSignup({ meta, agency, filters }) {
   }
 
   return (
-    <Card className="gap-3 border-t-4 border-t-ridge py-4">
+    <Card className="gap-3 border-t-4 border-t-pine py-4">
       <CardHeader className="px-4">
-        <CardTitle className="flex items-center gap-2"><Mail className="size-4 text-ridge" /> Email me the top grants</CardTitle>
+        <CardTitle className="flex items-center gap-2"><Mail className="size-4 text-pine" /> Email me the top grants</CardTitle>
         <CardDescription>The best matches for {agency.short} with the filters you've set. Unsubscribe anytime.</CardDescription>
       </CardHeader>
       <CardContent className="px-4">
@@ -271,7 +271,7 @@ export function ImproveMatches({ agency, onChanged }) {
       <Card className="gap-3 py-4">
         <CollapsibleTrigger className="flex w-full items-start justify-between gap-2 px-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded-md">
           <div>
-            <p className="leading-none font-semibold">Improve your matches</p>
+            <p className="leading-none font-extrabold">Improve your matches</p>
             <p className="mt-1.5 text-[13px] text-muted-foreground">
               {projects.length} project{projects.length === 1 ? "" : "s"}, {docs.length} plan{docs.length === 1 ? "" : "s"} added
             </p>
@@ -284,7 +284,7 @@ export function ImproveMatches({ agency, onChanged }) {
           {error && <Alert variant="destructive" className="bg-urgent-bg py-2"><AlertDescription>{error}</AlertDescription></Alert>}
 
           <section className="flex flex-col gap-2">
-            <h3 className="text-sm font-semibold text-ridge">Active projects</h3>
+            <h3 className="text-sm font-extrabold text-pine">Active projects</h3>
             <ItemList items={projects} label="project" render={(x) => x.title} onRemove={(x) => run(() => api.deleteProject(agency.id, x.id))} />
             <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); run(async () => { await api.addProject(agency.id, p); setP({ title: "", description: "" }); }); }}>
               <Input placeholder="Project name" aria-label="Project name" value={p.title} onChange={(e) => setP({ ...p, title: e.target.value })} required minLength={3} maxLength={150} />
@@ -297,7 +297,7 @@ export function ImproveMatches({ agency, onChanged }) {
           <Separator />
 
           <section className="flex flex-col gap-2">
-            <h3 className="text-sm font-semibold text-ridge">Strategic plan or mandates</h3>
+            <h3 className="text-sm font-extrabold text-pine">Strategic plan or mandates</h3>
             <ItemList items={docs} label="plan" onRemove={(x) => run(() => api.deleteDocument(agency.id, x.id))}
               render={(x) => <>{x.title} <span className="text-muted-foreground">({Math.round(x.characters / 1000)}K chars)</span></>} />
             <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); run(async () => { await api.addDocument(agency.id, d); setD({ title: "", content: "" }); }); }}>
