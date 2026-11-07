@@ -4,47 +4,53 @@
 /* shadcn's dark: styles only apply under a .dark class. The app is light-only, so OS dark mode doesn't grey out inputs. */
 @custom-variant dark (&:is(.dark *));
 
-/* Palette: Blue Ridge haze + longleaf pine.
-   ridge  #1E3542  headings, header, dark text
-   pine   #1F5A45  primary actions
-   haze   #7B9DB2  accents, focus
-   mist   #F1F5F7  page background
-   Red and goldenrod are reserved for meaning (closing soon, matching funds required). */
+/* Palette: a US Forest Service sign. Deep longleaf pine with routed honey-yellow lettering.
+   pine   #0F3D33  the dominant color: hero, header band, headings, primary buttons
+   blaze  #F0B429  the one accent: the action a person came to take, and the highest contours
+   fog    #EEF2EF  page background
+   Red is reserved for meaning (closes within 14 days). */
 :root {
-  --radius: 0.5rem;
-  --background: #f1f5f7;
-  --foreground: #1e3542;
-  --card: #ffffff;
-  --card-foreground: #1e3542;
-  --popover: #ffffff;
-  --popover-foreground: #1e3542;
-  --primary: #1f5a45;
-  --primary-foreground: #ffffff;
-  --secondary: #e3ebf0;
-  --secondary-foreground: #1e3542;
-  --muted: #e9eff2;
-  --muted-foreground: #586c79;
-  --accent: #e3ebf0;
-  --accent-foreground: #1e3542;
-  --destructive: #b42318;
-  --border: #d5e0e6;
-  --input: #c3d1d9;
-  --ring: #4f7f98;
+  --radius: 0.375rem;
 
-  --ridge: #1e3542;
-  --haze: #7b9db2;
+  --pine: #0f3d33;
+  --pine-deep: #08261f;
+  --pine-700: #1e5245;
+  --pine-500: #3f6f62;
+  --pine-300: #8fb3a6;
+  --pine-100: #dce8e3;
+  --pine-ink: #0b2621;
+  --fog: #eef2ef;
+  --blaze: #f0b429;
+  --blaze-hover: #f5c556;
+  --blaze-deep: #8a5d00;
+  --blaze-tint: #fcf0cf;
   --urgent: #b42318;
-  --urgent-bg: #fcebe8;
-  --soon: #1f5a45;
-  --soon-bg: #e2f0e9;
-  --forecast: #2e6584;
-  --forecast-bg: #e2eef5;
-  --gold: #8a5a00;
-  --gold-bg: #fbf1d6;
+  --urgent-bg: #fbe9e6;
+
+  --background: var(--fog);
+  --foreground: var(--pine-ink);
+  --card: #ffffff;
+  --card-foreground: var(--pine-ink);
+  --popover: #ffffff;
+  --popover-foreground: var(--pine-ink);
+  --primary: var(--pine);
+  --primary-foreground: #ffffff;
+  --secondary: var(--pine-100);
+  --secondary-foreground: var(--pine-ink);
+  --muted: #e4ebe7;
+  --muted-foreground: #4b625c;
+  --accent: #e4ebe7;
+  --accent-foreground: var(--pine-ink);
+  --destructive: var(--urgent);
+  --border: #d3ddd8;
+  --input: #bfccc6;
+  --ring: var(--pine-500);
 }
 
 @theme inline {
-  --font-sans: "Public Sans Variable", "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Bricolage Grotesque Variable", ui-sans-serif, sans-serif;
+  --font-display: "Fraunces Variable", ui-serif, serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
   --radius-sm: calc(var(--radius) - 2px);
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) + 2px);
@@ -67,16 +73,20 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-ridge: var(--ridge);
-  --color-haze: var(--haze);
+  --color-pine: var(--pine);
+  --color-pine-deep: var(--pine-deep);
+  --color-pine-700: var(--pine-700);
+  --color-pine-500: var(--pine-500);
+  --color-pine-300: var(--pine-300);
+  --color-pine-100: var(--pine-100);
+  --color-pine-ink: var(--pine-ink);
+  --color-fog: var(--fog);
+  --color-blaze: var(--blaze);
+  --color-blaze-hover: var(--blaze-hover);
+  --color-blaze-deep: var(--blaze-deep);
+  --color-blaze-tint: var(--blaze-tint);
   --color-urgent: var(--urgent);
   --color-urgent-bg: var(--urgent-bg);
-  --color-soon: var(--soon);
-  --color-soon-bg: var(--soon-bg);
-  --color-forecast: var(--forecast);
-  --color-forecast-bg: var(--forecast-bg);
-  --color-gold: var(--gold);
-  --color-gold-bg: var(--gold-bg);
 }
 
 @layer base {
@@ -86,29 +96,47 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-size: 15px;
-    line-height: 1.5;
+    line-height: 1.55;
+    font-optical-sizing: auto;
   }
   h1, h2, h3, h4 {
     text-wrap: balance;
   }
   code {
-    @apply rounded bg-black/5 px-1.5 py-0.5 text-[0.9em];
+    @apply rounded bg-black/5 px-1.5 py-0.5 font-mono text-[0.85em];
   }
 }
 
-/* Onboarding backdrop: layered Blue Ridge ridgelines (public/ridges.svg). */
-.ridge-backdrop {
-  background: #d3e2ea url("/ridges.svg") center bottom / cover no-repeat;
+/* Hero sky over the pine: a low honey sunrise top right, the valley darkening bottom left. */
+@utility topo-sky {
+  background:
+    radial-gradient(55% 60% at 82% 8%, rgb(240 180 41 / 0.2), transparent 70%),
+    radial-gradient(70% 70% at 0% 100%, rgb(8 38 31 / 0.95), transparent 70%),
+    radial-gradient(120% 90% at 50% 0%, var(--pine-700), transparent 75%),
+    linear-gradient(172deg, var(--pine) 0%, var(--pine-deep) 100%);
 }
 
-/* One deliberate moment: the onboarding panel settles in on first load. */
-@keyframes settle {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: none; }
+/* A survey grid like the one printed on a USGS quadrangle, fading toward the edges. */
+@utility survey-grid {
+  background-image:
+    linear-gradient(to right, rgb(238 242 239 / 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(238 242 239 / 0.06) 1px, transparent 1px);
+  background-size: 120px 120px;
+  mask-image: radial-gradient(90% 80% at 60% 40%, black 30%, transparent 85%);
 }
-.settle {
-  animation: settle 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+
+/* The same grid, faint, on the fog behind the results. */
+@utility fog-field {
+  background-color: var(--fog);
+  background-image:
+    linear-gradient(to right, rgb(15 61 51 / 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(15 61 51 / 0.035) 1px, transparent 1px);
+  background-size: 120px 120px;
 }
-@media (prefers-reduced-motion: reduce) {
-  .settle { animation: none; }
+
+/* Fraunces at display size: light, soft, high optical size. */
+@utility display-light {
+  font-family: var(--font-display);
+  font-weight: 200;
+  font-variation-settings: "opsz" 144, "SOFT" 100;
 }

@@ -11,12 +11,12 @@ export default function ScoreFilter({ filters, onChange, belowScoreCount }) {
   const hasLowerScores = belowScoreCount > 0;
 
   return (
-    <div className="mt-4 rounded-lg border bg-white px-3 py-3 sm:px-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
         <div className="flex items-center gap-2">
-          <Label htmlFor="min-score" className="text-sm">Minimum score</Label>
+          <Label htmlFor="min-score" className="text-sm font-normal text-muted-foreground">Minimum score</Label>
           <Select value={String(filters.min_score)} onValueChange={(value) => onChange({ ...filters, min_score: Number(value) })}>
-            <SelectTrigger id="min-score" size="sm" className="w-24"><SelectValue /></SelectTrigger>
+            <SelectTrigger id="min-score" size="sm" className="w-24 bg-white"><SelectValue /></SelectTrigger>
             <SelectContent>
               {options.map((score) => <SelectItem key={score} value={String(score)}>{score}+</SelectItem>)}
             </SelectContent>
@@ -29,7 +29,7 @@ export default function ScoreFilter({ filters, onChange, belowScoreCount }) {
           <Label htmlFor="include-lower-scores" className="cursor-pointer text-sm font-normal">Include lower scores</Label>
         </div>
       </div>
-      <p id="score-filter-status" aria-live="polite" className="mt-2 text-[13px] text-muted-foreground">
+      <p id="score-filter-status" aria-live="polite" className="mt-1.5 text-[13px] text-muted-foreground">
         {includeLower ? "Showing all scores." : `Showing scores ${filters.min_score} and above.`}
         {hasLowerScores && (includeLower
           ? ` Includes ${belowScoreCount} below ${filters.min_score}.`

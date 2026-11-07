@@ -10,7 +10,7 @@ const TIMING_HELP = {
 function Section({ title, children }) {
   return (
     <section>
-      <h3 className="mb-1 text-sm font-semibold text-ridge">{title}</h3>
+      <h3 className="mb-1 text-sm font-extrabold text-pine">{title}</h3>
       {children}
     </section>
   );
@@ -35,7 +35,7 @@ export default function Glossary({ meta, open, onOpenChange }) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="text-ridge">Grant types in plain English</DialogTitle>
+          <DialogTitle className="display-light text-3xl font-extralight text-pine">Grant types in plain English</DialogTitle>
           <DialogDescription>What the labels on each grant mean, and how the match score is worked out.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-5">

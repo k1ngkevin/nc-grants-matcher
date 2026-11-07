@@ -18,6 +18,8 @@ const buttonVariants = cva(
         ghost:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline",
+        // The one accent: reserved for the action a person came to take.
+        blaze: "bg-blaze font-extrabold text-pine-ink hover:bg-blaze-hover disabled:bg-pine-500/40 disabled:text-current disabled:opacity-60",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",

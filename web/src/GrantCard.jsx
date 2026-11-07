@@ -11,16 +11,18 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 
 const LEVEL_LABEL = { strong: "Strong match", good: "Good match", possible: "Possible match" };
+// Strong matches invert to solid pine; weaker ones step down in weight, not hue.
 const LEVEL_STYLE = {
-  strong: "bg-soon-bg text-soon",
-  good: "bg-forecast-bg text-forecast",
+  strong: "bg-pine text-fog",
+  good: "bg-pine-100 text-pine",
   possible: "bg-muted text-muted-foreground",
 };
+// Color only where it means something: red for closing soon, a dashed outline for "not open yet".
 const TIMING_STYLE = {
-  urgent: "bg-urgent-bg text-urgent font-semibold",
-  standard: "bg-soon-bg text-soon",
-  later: "bg-muted text-foreground",
-  forecasted: "bg-forecast-bg text-forecast",
+  urgent: "bg-urgent text-white font-extrabold",
+  standard: "bg-pine-100 text-pine",
+  later: "",
+  forecasted: "border-dashed border-pine-500 bg-transparent text-pine",
 };
 const PART_LABELS = [
   ["semantic", "Mission & project text similarity"],
@@ -44,7 +46,7 @@ function withBold(text) {
 }
 
 function Chip({ className, help, children }) {
-  const badge = <Badge variant="secondary" className={cn("rounded-full px-2.5 py-0.5 text-[12.5px] font-medium", className)} tabIndex={help ? 0 : undefined}>{children}</Badge>;
+  const badge = <Badge variant="secondary" className={cn("rounded-sm border-transparent bg-muted px-2 py-0.5 text-[12.5px] font-medium text-pine-ink", className)} tabIndex={help ? 0 : undefined}>{children}</Badge>;
   if (!help) return badge;
   return (
     <Tooltip>
@@ -94,50 +96,53 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
   return (
     <div ref={ref}>
     <Card className={cn(
-      "gap-0 overflow-hidden py-0 shadow-xs",
+      "flex-row gap-0 overflow-hidden py-0",
       s.timing === "urgent" && "border-l-4 border-l-urgent",
       startExpanded && "ring-2 ring-ring",
     )}>
-      <div className="flex gap-4 p-4 sm:p-5">
-        <div className={cn("flex w-[68px] shrink-0 flex-col items-center self-start rounded-lg px-1 pt-2 pb-1.5 text-center sm:w-[76px]", LEVEL_STYLE[r.match_level])}
-          title="Ranking score out of 100. Match labels also require mission and program relevance.">
-          <span className="text-[26px] leading-none font-bold tabular-nums">{r.score}</span>
-          <span className="mt-1 text-[11px] leading-tight font-semibold">{LEVEL_LABEL[r.match_level]}</span>
-        </div>
+      <div className={cn("flex w-[76px] shrink-0 flex-col items-center px-1 pt-5 pb-4 text-center sm:w-[96px]", LEVEL_STYLE[r.match_level])}
+        title="Ranking score out of 100. Match labels also require mission and program relevance.">
+        <span className="font-display text-[44px] leading-none font-extrabold tracking-[-0.04em] tabular-nums sm:text-[52px]">{r.score}</span>
+        <span className="mt-2 text-[11.5px] leading-tight font-medium">{LEVEL_LABEL[r.match_level]}</span>
+      </div>
 
-        <div className="min-w-0 flex-1">
-          <div className="text-[13px] text-muted-foreground">
-            {o.federal_agency}
-            {o.number && <span className="ml-2 tabular-nums">{o.number}</span>}
-            {o.is_sample ? <Badge className="ml-2 bg-gold-bg text-[11px] text-gold">SAMPLE</Badge> : null}
+      <div className="min-w-0 flex-1 p-4 sm:p-6">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-muted-foreground">
+            <span>{o.federal_agency}</span>
+            {o.number && <span className="font-mono text-[12px] tabular-nums">{o.number}</span>}
+            {o.is_sample ? <Badge className="bg-blaze-tint text-[11px] text-blaze-deep">Sample</Badge> : null}
           </div>
-          <h3 className="mt-0.5 mb-2.5 text-[17px] leading-snug font-semibold">
-            <a href={o.url} target="_blank" rel="noopener noreferrer" className="text-ridge hover:underline">{o.title}</a>
+          <h3 className="mt-1 mb-3 text-[19px] leading-snug font-extrabold tracking-[-0.01em]">
+            <a href={o.url} target="_blank" rel="noopener noreferrer" className="text-pine decoration-blaze decoration-2 underline-offset-4 hover:underline">{o.title}</a>
           </h3>
           <div className="flex flex-wrap gap-1.5">
             <Chip className={TIMING_STYLE[s.timing]}>{deadlineText(r)}</Chip>
             <Chip>{s.amount ? `Up to ${money(s.amount)}` : "Amount not listed"}</Chip>
             <Chip help={g.competition_help}>{g.competition}</Chip>
             <Chip help={g.instrument_help}>{g.instrument}</Chip>
-            <Chip className={g.match === "Requires matching funds" ? "bg-gold-bg text-gold" : ""}>{g.match}</Chip>
+            <Chip className={g.match === "Requires matching funds" ? "border-pine-ink bg-transparent font-extrabold" : ""}>{g.match}</Chip>
           </div>
 
           <div className="mt-4 max-w-[75ch]">
             {r.score_preview && (
-              <dl className="mb-3 grid gap-2 text-[13px] sm:grid-cols-2">
-                <div className="rounded-md bg-muted/60 px-3 py-2">
-                  <dt className="text-muted-foreground">Mission & program relevance</dt>
-                  <dd className="mt-0.5 font-semibold tabular-nums">{r.score_preview.relevance_points}/{r.score_preview.relevance_max} points</dd>
-                </div>
-                <div className="rounded-md bg-muted/60 px-3 py-2">
-                  <dt className="text-muted-foreground">Eligibility, timing & award size</dt>
-                  <dd className="mt-0.5 font-semibold tabular-nums">{r.score_preview.practical_points}/{r.score_preview.practical_max} points</dd>
-                </div>
+              <dl className="mb-4 grid gap-x-6 gap-y-3 text-[13px] sm:grid-cols-2">
+                {[
+                  ["Mission & program relevance", r.score_preview.relevance_points, r.score_preview.relevance_max],
+                  ["Eligibility, timing & award size", r.score_preview.practical_points, r.score_preview.practical_max],
+                ].map(([label, pts, max]) => (
+                  <div key={label}>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <dt className="text-muted-foreground">{label}</dt>
+                      <dd className="font-mono text-[12px] tabular-nums">{pts}/{max}</dd>
+                    </div>
+                    <Progress value={(pts / max) * 100} className="mt-1.5 h-1 bg-muted" aria-label={label} />
+                  </div>
+                ))}
               </dl>
             )}
-            {r.score_preview?.caution && <p className="mb-2 text-[13px] font-medium text-gold">{r.score_preview.caution}</p>}
-            <p className="text-[13px] font-semibold text-muted-foreground">Match preview{r.rationale_source === "ai" ? " (AI summary)" : ""}</p>
-            <p className="mt-0.5">{withBold(r.rationale)}</p>
+            {r.score_preview?.caution && <p className="mb-2 text-[13px] font-extrabold text-blaze-deep">{r.score_preview.caution}</p>}
+            <p className="text-[13px] text-muted-foreground">{r.rationale_source === "ai" ? "AI summary" : "Why it matches"}</p>
+            <p className="mt-1 text-[15.5px] leading-relaxed">{withBold(r.rationale)}</p>
             {s.feedback_notes?.length > 0 && <p className="mt-1 text-[13px] text-muted-foreground italic">Adjusted because {s.feedback_notes.join("; ")}.</p>}
           </div>
 
@@ -152,7 +157,7 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
           <Collapsible open={expanded} onOpenChange={setExpanded}>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               {view !== "pursue" && (
-                <Button size="sm" disabled={busy} onClick={() => setPanel(panel === "pursue" ? null : "pursue")} aria-expanded={panel === "pursue"}>Pursue</Button>
+                <Button size="sm" variant="blaze" className="px-4" disabled={busy} onClick={() => setPanel(panel === "pursue" ? null : "pursue")} aria-expanded={panel === "pursue"}>Pursue</Button>
               )}
               {view !== "save" && view !== "pursue" && (
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => act("save")}>Save for later</Button>
@@ -173,11 +178,11 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
 
             {panel === "pursue" && (
               <div className="mt-3 rounded-lg border bg-muted/50 p-3">
-                <p className="mb-2 text-sm font-semibold">Send this to your grant-writing team</p>
+                <p className="mb-2 text-sm font-extrabold">Send this to your grant-writing team</p>
                 <div className="flex flex-col gap-2 md:flex-row">
                   <Input type="email" className="bg-white" placeholder="team@agency.nc.gov (optional)" value={teamEmail} onChange={(e) => setTeamEmail(e.target.value)} aria-label="Team email" />
                   <Input className="bg-white" placeholder="Note for the team (optional)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} aria-label="Note for the team" />
-                  <Button disabled={busy} onClick={pursue}>Mark as Pursue</Button>
+                  <Button variant="blaze" disabled={busy} onClick={pursue}>Mark as Pursue</Button>
                 </div>
                 <p className="mt-2 text-[13px] text-muted-foreground">Leave the email blank to just track it under Pursuing.</p>
               </div>
@@ -185,7 +190,7 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
 
             {panel === "dismiss" && (
               <div className="mt-3 rounded-lg border bg-muted/50 p-3">
-                <p className="mb-2 text-sm font-semibold">Why isn't this a fit? Your answer improves future rankings for {agency.short}.</p>
+                <p className="mb-2 text-sm font-extrabold">Why isn't this a fit? Your answer improves future rankings for {agency.short}.</p>
                 <div className="flex flex-wrap gap-1.5">
                   {Object.entries(meta.dismiss_reasons).map(([key, label]) => (
                     <Button key={key} size="sm" variant="outline" className="rounded-full bg-white hover:border-urgent/40 hover:bg-urgent-bg hover:text-urgent"
@@ -195,19 +200,19 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
               </div>
             )}
 
-            {msg && <p className="mt-2 text-[13.5px] text-soon" role="status">{msg}</p>}
+            {msg && <p className="mt-2 text-[13.5px] font-medium text-pine" role="status">{msg}</p>}
 
             <CollapsibleContent>
               <div className="mt-4 border-t pt-4">
                 <div className="grid gap-6 md:grid-cols-2">
                   <div>
-                    <h4 className="mb-1 text-sm font-semibold">Ranking score breakdown ({r.score}/100)</h4>
+                    <h4 className="mb-1 text-sm font-extrabold">Ranking score breakdown ({r.score}/100)</h4>
                     <p className="mb-3 text-[13px] text-muted-foreground">Use these signals to prioritize review and confirm that the funded activities fit your agency.</p>
                     <div className="flex flex-col gap-2.5">
                       {PART_LABELS.map(([key, label]) => (
                         <div key={key} className="grid grid-cols-[1fr_44px] items-center gap-x-3 gap-y-1 text-[13px]">
                           <span>{label}</span>
-                          <span className="text-right text-muted-foreground tabular-nums">{r.breakdown[key]}/{meta.weights[key]}</span>
+                          <span className="text-right font-mono text-[12px] text-muted-foreground tabular-nums">{r.breakdown[key]}/{meta.weights[key]}</span>
                           <Progress value={(r.breakdown[key] / meta.weights[key]) * 100} className="col-span-2 h-1.5 bg-muted" aria-label={label} />
                         </div>
                       ))}
@@ -220,12 +225,12 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
                     </div>
                   </div>
                   <div>
-                    <h4 className="mb-3 text-sm font-semibold">Key facts</h4>
+                    <h4 className="mb-3 text-sm font-extrabold">Key facts</h4>
                     <dl className="grid grid-cols-[120px_1fr] gap-x-3 gap-y-1.5 text-[13.5px]">
                       <dt className="text-muted-foreground">Eligibility</dt><dd>{s.eligibility}</dd>
                       <dt className="text-muted-foreground">Grant type</dt><dd>{g.competition}: {g.competition_help}</dd>
                       {s.matched_project && (<><dt className="text-muted-foreground">Your project</dt><dd>{s.matched_project.title}</dd></>)}
-                      {o.aln_numbers?.length > 0 && (<><dt className="text-muted-foreground">Assistance listing</dt><dd>{o.aln_numbers.join(", ")}</dd></>)}
+                      {o.aln_numbers?.length > 0 && (<><dt className="text-muted-foreground">Assistance listing</dt><dd className="font-mono text-[12.5px]">{o.aln_numbers.join(", ")}</dd></>)}
                       {o.nc_past_funding ? (<><dt className="text-muted-foreground">NC past funding</dt><dd>{money(o.nc_past_funding)} to NC recipients last fiscal year</dd></>) : null}
                       {o.estimated_funding ? (<><dt className="text-muted-foreground">Total program funding</dt><dd>{money(o.estimated_funding)}{o.expected_awards ? ` across ~${o.expected_awards} awards` : ""}</dd></>) : null}
                       <dt className="text-muted-foreground">Posted</dt><dd>{fmtDate(o.open_date) || "Not listed"}</dd>
@@ -243,7 +248,6 @@ export default function GrantCard({ result: r, view, agency, meta, onDecide, sta
               </div>
             </CollapsibleContent>
           </Collapsible>
-        </div>
       </div>
     </Card>
     </div>
