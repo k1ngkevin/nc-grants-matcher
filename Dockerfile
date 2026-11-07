@@ -12,7 +12,7 @@ COPY server/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY server/ ./
 COPY --from=web /web/dist /app/web/dist
-ENV WEB_DIST=/app/web/dist DATA_DIR=/data
+ENV WEB_DIST=/app/web/dist DATA_DIR=/data APP_ENV=production AUTH_MODE=entra
 VOLUME ["/data"]
 EXPOSE 8000
 RUN useradd -r -u 1001 app && mkdir -p /data && chown app /data

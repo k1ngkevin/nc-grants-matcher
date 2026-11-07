@@ -12,6 +12,10 @@ ENV_FILE = os.getenv("ENV_FILE", str(ROOT.parent / ".env"))
 if ENV_FILE:
     load_dotenv(ENV_FILE, override=False)
 
+APP_ENV = os.getenv("APP_ENV", "development")
+AUTH_MODE = os.getenv("AUTH_MODE", "development")
+ENTRA_TENANT_ID = os.getenv("ENTRA_TENANT_ID", "")
+
 DATA_DIR = Path(os.getenv("DATA_DIR", ROOT / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = Path(os.getenv("DB_PATH", DATA_DIR / "matchmaker.db"))

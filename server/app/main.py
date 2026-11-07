@@ -10,12 +10,12 @@ from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from urllib.parse import quote
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import config, db, emailer, evaluate
+from . import auth, config, db, emailer, evaluate
 from .agencies import AGENCIES, AGENCY_BY_ID
 from .ingest import pipeline
 from .matching import embeddings, explain
@@ -39,6 +39,7 @@ def _scheduled_ingest():
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    auth.validate_config()
     db.init_db()
     if config.EMAIL_ENABLED:
         log.info("Email: sending through %s as %s", emailer.describe_backend(), config.SMTP_FROM)
@@ -76,7 +77,30 @@ async def lifespan(_: FastAPI):
         scheduler.shutdown(wait=False)
 
 
-app = FastAPI(title="NC Federal Funds Matchmaker", lifespan=lifespan)
+app = FastAPI(title="NC Federal Funds Matchmaker", lifespan=lifespan,
+              dependencies=[Depends(auth.authorize_agency)])
+
+
+@app.middleware("http")
+async def authenticate(request: Request, call_next):
+    if request.url.path == "/healthz":
+        return JSONResponse({"status": "ok"})
+    if config.AUTH_MODE != "development":
+        try:
+            request.state.identity = auth.identity_from_headers(request)
+            # Easy Auth uses cookies. Block cross-origin writes and JSON requests
+            # submitted as simple HTML forms; do not trust browser-supplied identity.
+            if request.method not in {"GET", "HEAD", "OPTIONS"}:
+                origin = request.headers.get("origin")
+                if origin and origin != config.PUBLIC_BASE_URL:
+                    raise HTTPException(403, "Cross-origin requests are not allowed.")
+                if request.url.path.startswith("/api/") and request.url.path not in {
+                    "/api/subscriptions/confirm", "/api/subscriptions/unsubscribe", "/api/admin/ingest"
+                } and request.headers.get("content-type", "").split(";")[0] != "application/json" and request.method != "DELETE":
+                    raise HTTPException(415, "Use application/json.")
+        except HTTPException as exc:
+            return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+    return await call_next(request)
 
 
 # ---------------- basic hardening ----------------
@@ -155,7 +179,7 @@ class SubscribeBody(BaseModel):
     email: str = Field(max_length=254)
     agency_id: str
     frequency: str = Field("weekly", pattern="^(daily|weekly|biweekly|monthly)$")
-    top_n: int = Field(10, ge=3, le=25)
+    top_n: int = Field(10, ge=1, le=emailer.MAX_DIGEST_GRANTS, strict=True)
     filters: dict = {}
 
 
@@ -167,12 +191,13 @@ def _filters(body: SearchBody) -> Filters:
 
 # ---------------- API ----------------
 @app.get("/api/meta")
-def meta():
+def meta(request: Request):
     last = db.get_meta("last_ingest")
     with db.session() as conn:
         n = conn.execute("SELECT COUNT(*), SUM(is_sample) FROM opportunities").fetchone()
     return {
-        "agencies": [{k: a[k] for k in ("id", "short", "name", "applicant")} for a in sorted(AGENCIES, key=lambda a: a["name"])],
+        "agencies": [{k: a[k] for k in ("id", "short", "name", "applicant")} for a in sorted(AGENCIES, key=lambda a: a["name"])
+                     if config.AUTH_MODE == "development" or request.state.identity.allows(a["id"])],
         "last_ingest": last,
         "opportunity_count": n[0],
         "sample_data": bool(n[1]),
@@ -180,6 +205,7 @@ def meta():
         "default_min_score": DEFAULT_MIN_SCORE,
         "email_enabled": config.EMAIL_ENABLED,
         "email_confirmation": config.REQUIRE_EMAIL_CONFIRMATION,
+        "max_digest_grants": emailer.MAX_DIGEST_GRANTS,
         "allowed_email_domains": config.ALLOWED_EMAIL_DOMAINS,
         "ai": {"embeddings": embeddings.active_backend(), "explanations": "azure-openai" if explain.available() else "rules"},
         "dismiss_reasons": DISMISS_REASONS,
@@ -356,12 +382,27 @@ def unsubscribe(token: str):
     return _page("You're unsubscribed", "You won't get any more grant alerts at this address.")
 
 
+@app.post("/api/subscriptions/test")
+def test_digest(body: SubscribeBody, request: Request):
+    rate_limit(request, "test_digest", 5)
+    _agency(body.agency_id)
+    err = emailer.valid_email(body.email)
+    if err:
+        raise HTTPException(400, err)
+    if config.AUTH_MODE != "development" and body.email.strip().lower() != request.state.identity.name.lower():
+        raise HTTPException(403, "Send test emails only to your signed-in work email.")
+    result = emailer.send_test_digest(body.email.strip(), body.agency_id, body.filters, body.top_n)
+    if result["delivery"].get("error"):
+        raise HTTPException(503, "The test email could not be sent. Check the email provider settings and try again.")
+    return result
+
+
 @app.post("/api/subscriptions/preview", response_class=HTMLResponse)
 def preview(body: SubscribeBody):
     _agency(body.agency_id)
     f = Filters.from_dict({**body.filters, "agency_id": body.agency_id, "view": "recommended", "sort": "score"})
     data = search(f, limit=body.top_n, with_llm=True)
-    fake = {"agency_id": body.agency_id, "token": "preview", "frequency": body.frequency}
+    fake = {"agency_id": body.agency_id, "token": "preview", "frequency": body.frequency, "top_n": body.top_n}
     return HTMLResponse(emailer.digest_html(fake, data))
 
 
@@ -372,7 +413,7 @@ def metrics():
 
 @app.post("/api/admin/ingest")
 def admin_ingest(request: Request, sample: bool = False):
-    if not ADMIN_TOKEN or request.headers.get("x-admin-token") != ADMIN_TOKEN:
+    if config.AUTH_MODE == "development" and (not ADMIN_TOKEN or request.headers.get("x-admin-token") != ADMIN_TOKEN):
         raise HTTPException(403, "Set ADMIN_TOKEN and send it in the X-Admin-Token header")
     threading.Thread(target=pipeline.run, kwargs={"sample": sample}, daemon=True).start()
     return {"started": True}

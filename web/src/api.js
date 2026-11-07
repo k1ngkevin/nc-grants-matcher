@@ -32,6 +32,7 @@ export const api = {
   deleteDocument: (agency, id) => request("DELETE", `/api/agencies/${agency}/documents/${id}`),
   subscribe: (body) => request("POST", "/api/subscriptions", body),
   previewEmail: (body) => request("POST", "/api/subscriptions/preview", body),
+  testEmail: (body) => request("POST", "/api/subscriptions/test", body),
 };
 
 export function money(n) {

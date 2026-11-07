@@ -113,15 +113,19 @@ export function EmailSignup({ meta, agency, filters }) {
   const [email, setEmail] = useState(() => store.get("email", ""));
   const [frequency, setFrequency] = useState("weekly");
   const [topN, setTopN] = useState(10);
+  const [customCount, setCustomCount] = useState(false);
   const [state, setState] = useState({ status: "idle" });
 
   useEffect(() => setState({ status: "idle" }), [agency.id]);
 
   const { sort, ...searchFilters } = filters;
+  const maxGrants = meta.max_digest_grants || 100;
+  const validCount = Number.isInteger(topN) && topN >= 1 && topN <= maxGrants;
   const body = { email: email.trim(), agency_id: agency.id, frequency, top_n: topN, filters: searchFilters };
 
   const submit = async (e) => {
     e.preventDefault();
+    if (!validCount) return;
     setState({ status: "busy" });
     try {
       const res = await api.subscribe(body);
@@ -133,10 +137,29 @@ export function EmailSignup({ meta, agency, filters }) {
   };
 
   const preview = async () => {
+    if (!validCount) return;
     try {
       const html = await api.previewEmail({ ...body, email: body.email || "preview@example.gov" });
       const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
       window.open(url, "_blank", "noopener");
+    } catch (err) {
+      setState({ status: "error", error: err.message });
+    }
+  };
+
+  const sendTest = async () => {
+    if (!validCount) return;
+    if (!email.trim()) {
+      setState({ status: "error", error: "Enter your work email to send a test." });
+      return;
+    }
+    setState({ status: "busy" });
+    try {
+      const result = await api.testEmail(body);
+      const message = result.delivery.delivered
+        ? `Your email provider accepted a test with ${result.grant_count} grants for ${result.email}. Check your inbox and spam folder.`
+        : `Email delivery is not configured. A test with ${result.grant_count} grants was saved to the server outbox (${result.delivery.outbox_file}).`;
+      setState({ status: "test", message });
     } catch (err) {
       setState({ status: "error", error: err.message });
     }
@@ -152,11 +175,11 @@ export function EmailSignup({ meta, agency, filters }) {
         <CardContent className="flex flex-col gap-2 px-4 text-sm">
           {r.confirmed ? (
             <p>
-              We'll email the top {topN} grants for {agency.short} to <b>{r.email}</b> {frequency}.{" "}
+              We'll email up to {r.top_n} top grants for {agency.short} to <b>{r.email}</b> {r.frequency}.{" "}
               {r.delivery?.error ? "The first email didn't go out, so we'll try again within the hour." : "The first one was just sent."}
             </p>
           ) : (
-            <p>Check <b>{r.email}</b> for a confirmation link. Alerts start once you confirm.</p>
+            <p>Check <b>{r.email}</b> for a confirmation link for up to {r.top_n} top grants {r.frequency}. Alerts start once you confirm.</p>
           )}
           {!r.email_enabled && (
             <p className="text-[13px] text-muted-foreground">
@@ -164,7 +187,7 @@ export function EmailSignup({ meta, agency, filters }) {
               {r.dev_confirm_url && (<> <a className="text-primary underline" href={r.dev_confirm_url} target="_blank" rel="noopener noreferrer">Confirm now (demo)</a></>)}
             </p>
           )}
-          <Button variant="link" size="sm" className="h-auto self-start p-0" onClick={() => setState({ status: "idle" })}>Add another</Button>
+          <Button variant="link" size="sm" className="h-auto self-start p-0" onClick={() => setState({ status: "idle" })}>Update preferences or add another</Button>
         </CardContent>
       </Card>
     );
@@ -197,20 +220,38 @@ export function EmailSignup({ meta, agency, filters }) {
             </div>
             <div>
               <FieldLabel htmlFor="sub-n">How many</FieldLabel>
-              <Select value={String(topN)} onValueChange={(v) => setTopN(Number(v))}>
+              <Select value={customCount ? "custom" : String(topN)} onValueChange={(v) => {
+                setCustomCount(v === "custom");
+                if (v !== "custom") setTopN(Number(v));
+              }}>
                 <SelectTrigger id="sub-n" className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {[5, 10, 15, 25].map((n) => <SelectItem key={n} value={String(n)}>Top {n}</SelectItem>)}
+                  <SelectItem value="custom">Custom number</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
+          {customCount && (
+            <div>
+              <FieldLabel htmlFor="sub-custom-n">Number of grants (1–{maxGrants})</FieldLabel>
+              <Input id="sub-custom-n" type="number" required min={1} max={maxGrants} step={1}
+                value={topN} onChange={(e) => setTopN(e.target.value === "" ? "" : Number(e.target.value))}
+                aria-describedby="sub-count-help" />
+            </div>
+          )}
+          <p id="sub-count-help" className="text-[13px] text-muted-foreground">
+            Up to {validCount ? topN : maxGrants} grants per email, highest match score first. If fewer match your filters, we'll send fewer.
+            Subscribe again with the same email and agency to update your preferences.
+          </p>
           {meta.allowed_email_domains.length > 0 && <p className="text-[13px] text-muted-foreground">Allowed: {meta.allowed_email_domains.join(", ")}</p>}
+          {state.status === "test" && <Alert><AlertDescription>{state.message}</AlertDescription></Alert>}
           {state.status === "error" && (
             <Alert variant="destructive" className="bg-urgent-bg py-2"><AlertDescription>{state.error}</AlertDescription></Alert>
           )}
           <Button className="w-full" disabled={state.status === "busy"}>{state.status === "busy" ? "Subscribing…" : "Subscribe"}</Button>
-          <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={preview}>Preview the email</Button>
+          <Button type="button" variant="link" size="sm" className="h-auto p-0" disabled={!validCount || state.status === "busy"} onClick={preview}>Preview the email</Button>
+          <Button type="button" variant="secondary" disabled={!validCount || state.status === "busy"} onClick={sendTest}>Send me a test email</Button>
         </form>
       </CardContent>
     </Card>
